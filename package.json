@@ -5,7 +5,12 @@
   "engines": {
     "node": ">=20"
   },
+  "bin": {
+    "stealth-humanize": "bin/cli.ts"
+  },
   "scripts": {
+    "cli": "tsx bin/cli.ts",
+    "cli:build": "tsc --project tsconfig.cli.json",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -45,6 +50,7 @@
     "eslint-config-next": "^16.2.4",
     "postcss": "^8.5.10",
     "tailwindcss": "^4.2.4",
+    "tsx": "^4.19.2",
     "typescript": "^6.0.2"
   },
   "description": "Free open-source AI text humanizer with style-aware rewriting",
