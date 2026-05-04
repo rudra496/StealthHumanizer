@@ -16,7 +16,12 @@ function splitIntoSentences(text: string): string[] {
     current += text[i];
     if (['.', '!', '?'].includes(text[i])) {
       const beforeMatch = text.slice(Math.max(0, i - 5), i + 1);
-      if (!abbreviations.some(abbr => beforeMatch.endsWith(abbr))) {
+      // Period inside a version/decimal/IP number (digit . alnum) is not a sentence end:
+      // "Llama 3.x", "Python 3.11", "0.5", "192.168.1.1".
+      const isVersionOrDecimal = text[i] === '.'
+        && /\d/.test(text[i - 1] || '')
+        && /[a-zA-Z0-9]/.test(text[i + 1] || '');
+      if (!isVersionOrDecimal && !abbreviations.some(abbr => beforeMatch.endsWith(abbr))) {
         if (text[i + 1] === '"' || text[i + 1] === "'") { current += text[i + 1]; i++; }
         const trimmed = current.trim();
         if (trimmed.length > 0) sentences.push(trimmed);

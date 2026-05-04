@@ -20,8 +20,13 @@ function chance(probability: number): boolean {
 }
 
 function splitSentences(text: string): string[] {
-  // Split on sentence-ending punctuation while preserving the punctuation
-  return text.match(/[^.!?]*[.!?]+[\s]*/g)?.map(s => s.trim()).filter(s => s.length > 0) || [text.trim()];
+  // Protect periods inside version numbers, decimals, and IPs (e.g., "Llama 3.x",
+  // "Python 3.11", "0.5", "192.168.1.1") so they aren't treated as sentence boundaries.
+  const PERIOD_PLACEHOLDER = '';
+  const protectedText = text.replace(/(\d)\.(?=[a-zA-Z0-9])/g, `$1${PERIOD_PLACEHOLDER}`);
+  return protectedText.match(/[^.!?]*[.!?]+[\s]*/g)
+    ?.map(s => s.trim().replace(new RegExp(PERIOD_PLACEHOLDER, 'g'), '.'))
+    .filter(s => s.length > 0) || [text.trim()];
 }
 
 function splitParagraphs(text: string): string[] {
