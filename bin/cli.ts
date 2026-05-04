@@ -8,7 +8,7 @@
  *
  * Options:
  *   --level      light | medium | aggressive | ninja  (default: medium)
- *   --style      humanize | academic | casual | professional | creative | technical  (default: humanize)
+ *   --style      humanize | academic | casual | professional | creative | technical  (default: casual)
  *   --tone       conversational | academic-formal | academic-casual | journalistic |
  *                creative-writing | professional | technical | persuasive |
  *                storytelling | humorous | emotional | analytical | custom  (default: conversational)
@@ -67,7 +67,7 @@ function parseArgs(argv: string[]): {
   const opts = {
     text: null as string | null,
     level: 'medium' as RewriteLevel,
-    style: 'humanize' as StylePreset,
+    style: 'casual' as StylePreset,
     tone: 'conversational' as TonePreset,
     customTone: undefined as string | undefined,
     model: 'openai' as ModelProvider,
