@@ -177,6 +177,18 @@ function reorderSentences(paragraph: string): string {
   return [sentences[0], ...result, sentences[sentences.length - 1]].join(' ');
 }
 
+// ==================== 2b'. STRIP AI EM-DASHES ====================
+
+// Em-dashes (—) and prose-style en-dashes (–) are one of the strongest AI tells.
+// Replace them with commas. Numeric ranges like "2020–2025" or "9–10 AM" are preserved.
+function stripAIDashes(text: string): string {
+  const RANGE_PLACEHOLDER = 'RANGE';
+  return text
+    .replace(/(\d)\s*[–—]\s*(\d)/g, `$1${RANGE_PLACEHOLDER}$2`)
+    .replace(/\s*[—–]\s*/g, ', ')
+    .replace(new RegExp(RANGE_PLACEHOLDER, 'g'), '–');
+}
+
 // ==================== 2c. PUNCTUATION & FORMATTING NOISE ====================
 
 const CONTRACTIONS: [string, string][] = [
@@ -206,17 +218,6 @@ function addPunctuationNoise(text: string): string {
       const idx = Math.floor(Math.random() * sentenceEnds.length);
       const match = sentenceEnds[idx];
       result = result.replace(match, match[0] + '  ');
-    }
-  }
-
-  // 5% chance: em-dash instead of comma (find a comma to replace)
-  if (chance(0.05)) {
-    const commas = Array.from(result.matchAll(/,\s/g));
-    if (commas.length > 0) {
-      const c = randomPick(commas);
-      const before = result.slice(0, c.index);
-      const after = result.slice(c.index + c[0].length);
-      result = before + '—' + after;
     }
   }
 
@@ -655,7 +656,7 @@ function disruptFlow(text: string, style?: StylePreset): string {
 
       // 20% chance: start with a conjunction
       if (chance(0.20)) {
-        const conjunctions = ['And ', 'But ', 'So ', 'Plus ', 'Then again, ', 'OK—', 'Well, '];
+        const conjunctions = ['And ', 'But ', 'So ', 'Plus ', 'Then again, ', 'OK, ', 'Well, '];
         result[0] = randomPick(conjunctions) + result[0].charAt(0).toLowerCase() + result[0].slice(1);
       }
     }
@@ -691,6 +692,9 @@ export function postprocess(text: string, options?: PostProcessOptions): string 
   const style = options?.style;
   let result = text;
 
+  // ALWAYS: Strip em-dashes (strongest AI tell). Numeric ranges preserved.
+  result = stripAIDashes(result);
+
   // ALWAYS: Aggressive AI vocabulary removal (style-aware)
   result = aggressiveSynonymSwap(result, style);
 
@@ -701,7 +705,11 @@ export function postprocess(text: string, options?: PostProcessOptions): string 
     result = swapSynonyms(result);
     if (chance(0.5)) result = addPunctuationNoise(result);
     if (chance(0.3)) result = disruptFlow(result, style);
-    return result;
+    return result
+      .replace(/,\s*,/g, ',')
+      .replace(/\s+,/g, ',')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
   }
 
   // Full post-processing pipeline
@@ -738,6 +746,8 @@ export function postprocess(text: string, options?: PostProcessOptions): string 
     })
     .replace(/\n{3,}/g, '\n\n')
     .replace(/\.\s*\./g, '.')
+    .replace(/,\s*,/g, ',')
+    .replace(/\s+,/g, ',')
     .replace(/\s{2,}/g, ' ')
     .trim();
 

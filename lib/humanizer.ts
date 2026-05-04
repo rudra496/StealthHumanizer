@@ -5,6 +5,7 @@ import { getSystemPrompt, getRehumanizePrompt, getCorpusAwareSystemPrompt } from
 import { getCorpusCalibratedThresholds, hasStyleModel, loadStyleModelAsync } from './style-model';
 import { generateWithProvider, getProvider, generateAlternatives } from './providers';
 import { detectAI } from './detector';
+import { postprocess, corpusAwarePostprocess } from './postprocess';
 import { chunkText, countWords, addToHistory } from './storage';
 
 function splitIntoSentences(text: string): string[] {
@@ -84,15 +85,22 @@ export async function humanizeText(
   const chunks = chunkText(text, 2500);
 
   let humanizedText = '';
-  
-  // Pass 1: Full humanization
+
+  // Layer 1: LLM rewrite
   onProgress?.(1, maxPasses, 'Humanizing text...');
   for (let i = 0; i < chunks.length; i++) {
     const humanizedChunk = await humanizeChunk(chunks[i], options, apiKey);
     humanizedText += (i > 0 ? '\n\n' : '') + humanizedChunk;
   }
 
+  // Layer 2: Deterministic post-processing (em-dash stripping, vocab swap, etc.)
+  // Use light mode to preserve sentence order — full mode's reordering breaks logical flow.
   let currentText = humanizedText;
+  if (hasStyleModel()) {
+    currentText = corpusAwarePostprocess(currentText);
+  }
+  currentText = postprocess(currentText, { light: true });
+
   let passes = 1;
 
   // Multi-pass: Re-humanize flagged sentences until target score is reached
@@ -121,7 +129,7 @@ export async function humanizeText(
           }
           return orig;
         });
-        currentText = newSentences.join(' ');
+        currentText = postprocess(newSentences.join(' '), { light: true });
         passes = pass;
       } catch {
         break;
