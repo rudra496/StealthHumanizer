@@ -17,6 +17,7 @@
  *   --language   BCP-47 language code  (default: en)
  *   --domain     academic domain hint (optional)
  *   --target     target humanness score 0-100  (default: 80)
+ *   --style-guide path to a writing style guide file — sets tone to 'custom'
  *   --json       output full JSON result instead of plain text
  *   --help       show this help
  *
@@ -27,6 +28,7 @@
  *   CLOUDFLARE_API_KEY, ZAI_API_KEY
  */
 
+import { readFileSync } from 'fs';
 import { humanizeText } from '../lib/humanizer';
 import type { HumanizationOptions, ModelProvider, RewriteLevel, StylePreset, TonePreset } from '../lib/types';
 
@@ -53,6 +55,7 @@ function parseArgs(argv: string[]): {
   level: RewriteLevel;
   style: StylePreset;
   tone: TonePreset;
+  customTone?: string;
   model: ModelProvider;
   language: string;
   domain?: string;
@@ -66,7 +69,8 @@ function parseArgs(argv: string[]): {
     level: 'medium' as RewriteLevel,
     style: 'humanize' as StylePreset,
     tone: 'conversational' as TonePreset,
-    model: 'groq' as ModelProvider,
+    customTone: undefined as string | undefined,
+    model: 'openai' as ModelProvider,
     language: 'en',
     domain: undefined as string | undefined,
     targetScore: 80,
@@ -83,16 +87,20 @@ function parseArgs(argv: string[]): {
     } else if (a === '--json') {
       opts.json = true;
     } else if (a === '--level' || a === '--style' || a === '--tone' || a === '--model' ||
-               a === '--language' || a === '--domain' || a === '--target') {
+               a === '--language' || a === '--domain' || a === '--target' || a === '--style-guide') {
       const val = args[++i];
       if (!val) { process.stderr.write(`Missing value for ${a}\n`); process.exit(1); }
-      if (a === '--level')    opts.level = val as RewriteLevel;
-      if (a === '--style')    opts.style = val as StylePreset;
-      if (a === '--tone')     opts.tone = val as TonePreset;
-      if (a === '--model')    opts.model = val as ModelProvider;
-      if (a === '--language') opts.language = val;
-      if (a === '--domain')   opts.domain = val;
-      if (a === '--target')   opts.targetScore = parseInt(val, 10);
+      if (a === '--level')       opts.level = val as RewriteLevel;
+      if (a === '--style')       opts.style = val as StylePreset;
+      if (a === '--tone')        opts.tone = val as TonePreset;
+      if (a === '--model')       opts.model = val as ModelProvider;
+      if (a === '--language')    opts.language = val;
+      if (a === '--domain')      opts.domain = val;
+      if (a === '--target')      opts.targetScore = parseInt(val, 10);
+      if (a === '--style-guide') {
+        opts.customTone = readFileSync(val, 'utf8');
+        opts.tone = 'custom';
+      }
     } else if (!a.startsWith('--')) {
       positional.push(a);
     }
@@ -152,6 +160,7 @@ async function main() {
     level: opts.level,
     style: opts.style,
     tone: opts.tone,
+    customTone: opts.customTone,
     model: opts.model,
     language: opts.language,
     targetScore: opts.targetScore,
