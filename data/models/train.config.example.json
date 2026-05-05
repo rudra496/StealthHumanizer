@@ -1,15 +1,31 @@
 {
-  "benchmarkRowsPath": "data/papers/benchmark/current/benchmark.rows.jsonl",
-  "outputRoot": "data/models",
-  "seed": "stealthhumanizer-pr4-v1",
-  "threshold": 0.5,
-  "learningRate": 0.05,
-  "epochs": 60,
-  "l2": 0.0005,
-  "minMetrics": {
-    "accuracy": 0.55,
-    "f1": 0.55,
-    "auroc": 0.6
+  "$schema": "train.config.schema",
+  "description": "Production training configuration for StealthHumanizer ML pipeline",
+  "model_name": "t5-small",
+  "max_seq_length": 512,
+  "per_device_train_batch_size": 4,
+  "per_device_eval_batch_size": 8,
+  "num_train_epochs": 3,
+  "learning_rate": 3e-4,
+  "weight_decay": 0.01,
+  "warmup_ratio": 0.1,
+  "logging_steps": 50,
+  "save_steps": 500,
+  "eval_steps": 250,
+  "save_total_limit": 3,
+  "fp16": true,
+  "seed": 42,
+  "train_split": 0.9,
+  "output_dir": "./output/latest",
+  "quality_threshold": {
+    "min_train_loss": 0.5,
+    "min_eval_accuracy": 0.6,
+    "max_bleu_drop": 0.3
   },
-  "failOnQualityDrop": true
+  "notes": {
+    "t5-small": "Good starting point, ~60M params, trains fast on single GPU",
+    "t5-base": "Better quality, ~220M params, needs more memory",
+    "facebook/bart-base": "Alternative architecture, ~140M params",
+    "large_scale": "For 10k+ papers, increase epochs to 5-10 and use t5-base"
+  }
 }

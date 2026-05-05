@@ -1,0 +1,19 @@
+{
+  "description": "StealthHumanizer ML Training Pipeline — Requirements",
+  "ml_training": [
+    "torch>=2.0.0",
+    "transformers>=4.36.0",
+    "datasets>=2.16.0",
+    "evaluate>=0.4.0",
+    "sacrebleu>=2.3.0",
+    "sentencepiece>=0.1.99"
+  ],
+  "data_pipeline": [
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0"
+  ],
+  "optional_gpu": [
+    "accelerate>=0.25.0"
+  ]
+}
