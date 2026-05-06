@@ -28,6 +28,7 @@
  *   CLOUDFLARE_API_KEY, ZAI_API_KEY
  */
 
+import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { humanizeText } from '../lib/humanizer';
 import type { HumanizationOptions, ModelProvider, RewriteLevel, StylePreset, TonePreset } from '../lib/types';
