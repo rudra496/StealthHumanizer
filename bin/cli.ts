@@ -13,7 +13,7 @@
  *                creative-writing | professional | technical | persuasive |
  *                storytelling | humorous | emotional | analytical | custom  (default: conversational)
  *   --model      gemini | openai | claude | groq | mistral | cohere | together |
- *                openrouter | cerebras | deepinfra | huggingface | cloudflare | zai  (default: groq)
+ *                openrouter | cerebras | deepinfra | huggingface | cloudflare | zai  (default: openai)
  *   --language   BCP-47 language code  (default: en)
  *   --domain     academic domain hint (optional)
  *   --target     target humanness score 0-100  (default: 80)
