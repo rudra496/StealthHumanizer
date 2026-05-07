@@ -27,7 +27,7 @@ importers:
         specifier: ^19.2.6
         version: 19.2.6
       react-dom:
-        specifier: ^19.2.5
+        specifier: ^19.2.6
         version: 19.2.6(react@19.2.6)
       recharts:
         specifier: ^3.8.1

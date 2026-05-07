@@ -37,7 +37,7 @@
     "next": "16.2.6",
     "pdfjs-dist": "^5.7.284",
     "react": "^19.2.6",
-    "react-dom": "^19.2.5",
+    "react-dom": "^19.2.6",
     "recharts": "^3.8.1"
   },
   "devDependencies": {
