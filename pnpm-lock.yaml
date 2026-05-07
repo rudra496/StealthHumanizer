@@ -58,7 +58,7 @@ importers:
         specifier: ^16.2.6
         version: 16.2.6(@typescript-eslint/parser@8.59.2(eslint@9.39.4(jiti@2.7.0))(typescript@6.0.3))(eslint@9.39.4(jiti@2.7.0))(typescript@6.0.3)
       postcss:
-        specifier: ^8.5.10
+        specifier: ^8.5.14
         version: 8.5.14
       tailwindcss:
         specifier: ^4.2.4
