@@ -122,7 +122,7 @@ function GroqFreeGuide() {
               <p className="text-xs text-accent-500 font-bold uppercase tracking-wider mb-2">Step {step.num}</p>
               <h3 className="text-lg font-semibold text-white mb-2">{step.title}</h3>
               <p className="text-dark-400 text-sm mb-4">{step.desc}</p>
-              <Image src={step.image} alt={`Groq (Free) step ${step.num}: ${step.title}. ${step.desc}`} width={step.width} height={step.height} className="w-full h-auto rounded-xl border border-dark-700/40" />
+              <Image src={step.image} alt={`Groq (Free) step ${step.num}: ${step.title}`} width={step.width} height={step.height} className="w-full h-auto rounded-xl border border-dark-700/40" />
             </article>
           ))}
         </div>
