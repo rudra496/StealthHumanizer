@@ -95,17 +95,17 @@ function HowItWorks() {
 
 function GroqFreeGuide() {
   const steps = [
-    { num: '1', title: 'Open Settings and clear old keys', desc: 'Go to Settings → Danger Zone → Clear All API Keys (optional reset).', image: '/steps/1.jpg' },
-    { num: '2', title: 'Choose Groq (FREE)', desc: 'In Free Providers, select Groq (FREE).', image: '/steps/2.jpg' },
-    { num: '3', title: 'Click Get API Key', desc: 'Open Groq provider settings and click Get API Key.', image: '/steps/3.jpg' },
-    { num: '4', title: 'Create key in Groq Console', desc: 'Set a key name and expiration preference, then create key.', image: '/steps/4.jpg' },
-    { num: '5', title: 'Copy key', desc: 'Copy the generated Groq key immediately.', image: '/steps/5.jpg' },
-    { num: '6', title: 'Paste and save in app', desc: 'Paste key into the Groq API key field and press Save.', image: '/steps/6.jpg' },
-    { num: '7', title: 'Test key', desc: 'Click Test Key and confirm the key is valid.', image: '/steps/7.jpg' },
-    { num: '8', title: 'Keep Groq (FREE) active', desc: 'Return to provider selection and ensure Groq (FREE) is selected.', image: '/steps/8.jpg' },
-    { num: '9', title: 'Set humanizer preferences', desc: 'Configure rewrite level, style, tone, target score, and max words.', image: '/steps/9.jpg' },
-    { num: '10', title: 'Run the pipeline', desc: 'Paste/upload text and run rewrite → post-process → polish.', image: '/steps/10.jpg' },
-    { num: '11', title: 'Review and export', desc: 'Review output, re-humanize if needed, then export.', image: '/steps/11.jpg' },
+    { num: '1', title: 'Open Settings and clear old keys', desc: 'Go to Settings → Danger Zone → Clear All API Keys (optional reset).', image: '/steps/1.jpg', width: 611, height: 1280 },
+    { num: '2', title: 'Choose Groq (FREE)', desc: 'In Free Providers, select Groq (FREE).', image: '/steps/2.jpg', width: 608, height: 1280 },
+    { num: '3', title: 'Click Get API Key', desc: 'Open Groq provider settings and click Get API Key.', image: '/steps/3.jpg', width: 653, height: 1280 },
+    { num: '4', title: 'Create key in Groq Console', desc: 'Set a key name and expiration preference, then create key.', image: '/steps/4.jpg', width: 659, height: 1280 },
+    { num: '5', title: 'Copy key', desc: 'Copy the generated Groq key immediately.', image: '/steps/5.jpg', width: 661, height: 1280 },
+    { num: '6', title: 'Paste and save in app', desc: 'Paste key into the Groq API key field and press Save.', image: '/steps/6.jpg', width: 657, height: 1280 },
+    { num: '7', title: 'Test key', desc: 'Click Test Key and confirm the key is valid.', image: '/steps/7.jpg', width: 655, height: 1280 },
+    { num: '8', title: 'Keep Groq (FREE) active', desc: 'Return to provider selection and ensure Groq (FREE) is selected.', image: '/steps/8.jpg', width: 606, height: 1280 },
+    { num: '9', title: 'Set humanizer preferences', desc: 'Configure rewrite level, style, tone, target score, and max words.', image: '/steps/9.jpg', width: 656, height: 1280 },
+    { num: '10', title: 'Run the pipeline', desc: 'Paste/upload text and run rewrite → post-process → polish.', image: '/steps/10.jpg', width: 601, height: 1280 },
+    { num: '11', title: 'Review and export', desc: 'Review output, re-humanize if needed, then export.', image: '/steps/11.jpg', width: 608, height: 1280 },
   ];
 
   return (
@@ -122,7 +122,7 @@ function GroqFreeGuide() {
               <p className="text-xs text-accent-500 font-bold uppercase tracking-wider mb-2">Step {step.num}</p>
               <h3 className="text-lg font-semibold text-white mb-2">{step.title}</h3>
               <p className="text-dark-400 text-sm mb-4">{step.desc}</p>
-              <Image src={step.image} alt={`Groq (Free) setup step ${step.num}`} width={1600} height={900} className="w-full h-auto rounded-xl border border-dark-700/40" />
+              <Image src={step.image} alt={`Groq (Free) setup step ${step.num}`} width={step.width} height={step.height} className="w-full h-auto rounded-xl border border-dark-700/40" />
             </article>
           ))}
         </div>

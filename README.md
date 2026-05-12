@@ -10,10 +10,10 @@ Transform AI-generated text into natural, human-like writing using multi-pass re
 
 [![GitHub stars](https://img.shields.io/github/stars/rudra496/StealthHumanizer?style=social)](https://github.com/rudra496/StealthHumanizer/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/rudra496/StealthHumanizer?style=social)](https://github.com/rudra496/StealthHumanizer/fork)
-[![CI](https://github.com/rudra496/StealthHumanizer/actions/workflows/ci.yml/badge.png)](https://github.com/rudra496/StealthHumanizer/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.png)](./LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.png)](http://makeapullrequest.com)
-[![Good First Issues](https://img.shields.io/github/issues/rudra496/StealthHumanizer/good%20first%20issue.png)](https://github.com/rudra496/StealthHumanizer/labels/good%20first%20issue)
+[![CI](https://github.com/rudra496/StealthHumanizer/actions/workflows/ci.yml/badge.svg)](https://github.com/rudra496/StealthHumanizer/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
+[![Good First Issues](https://img.shields.io/github/issues/rudra496/StealthHumanizer/good%20first%20issue.svg)](https://github.com/rudra496/StealthHumanizer/labels/good%20first%20issue)
 
 > **If this saves you money on paid humanizers, consider giving it a star -- it helps others find it.**
 
