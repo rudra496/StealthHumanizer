@@ -110,37 +110,37 @@ Or use it live at [stealthhumanizer.vercel.app](https://stealthhumanizer.vercel.
 This walkthrough is specifically for the **Groq (Free)** provider flow.
 
 1. Open **Settings**, then go to **Danger Zone** and clear old keys if you want a clean reset.
-   ![Groq Free Step 1](steps/1.jpg)
+   ![Groq Free Step 1](./steps/1.jpg)
 
 2. In provider selection, choose **Groq (FREE)**.
-   ![Groq Free Step 2](steps/2.jpg)
+   ![Groq Free Step 2](./steps/2.jpg)
 
 3. In the Groq settings card, click **Get API Key**.
-   ![Groq Free Step 3](steps/3.jpg)
+   ![Groq Free Step 3](./steps/3.jpg)
 
 4. In Groq Console, create a key (set name + expiration setting).
-   ![Groq Free Step 4](steps/4.jpg)
+   ![Groq Free Step 4](./steps/4.jpg)
 
 5. Copy the generated Groq key (usually visible once).
-   ![Groq Free Step 5](steps/5.jpg)
+   ![Groq Free Step 5](./steps/5.jpg)
 
 6. Paste it into StealthHumanizer’s Groq API key field and press **Save**.
-   ![Groq Free Step 6](steps/6.jpg)
+   ![Groq Free Step 6](./steps/6.jpg)
 
 7. Click **Test Key** and confirm the key is valid.
-   ![Groq Free Step 7](steps/7.jpg)
+   ![Groq Free Step 7](./steps/7.jpg)
 
 8. Return to provider selection and keep **Groq (Free)** active.
-   ![Groq Free Step 8](steps/8.jpg)
+   ![Groq Free Step 8](./steps/8.jpg)
 
 9. Configure Humanizer options (rewrite level, style, tone, target score, max words).
-   ![Groq Free Step 9](steps/9.jpg)
+   ![Groq Free Step 9](./steps/9.jpg)
 
 10. Paste/upload your text and run the pipeline.
-    ![Groq Free Step 10](steps/10.jpg)
+    ![Groq Free Step 10](./steps/10.jpg)
 
 11. Review output, re-humanize if needed, and export.
-    ![Groq Free Step 11](steps/11.jpg)
+    ![Groq Free Step 11](./steps/11.jpg)
 
 > **Safety note:** Never share API keys in public chats, screenshots, repos, or screen recordings. To remove stored keys, use **Settings → Danger Zone → Clear All API Keys**.
 
