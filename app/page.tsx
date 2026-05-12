@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Sparkles, FileText, ArrowRight } from 'lucide-react';
+import Image from 'next/image';
 import Navbar from '@/components/Navbar';
 import Humanizer from '@/components/Humanizer';
 import BatchHumanizer from '@/components/BatchHumanizer';
@@ -92,6 +93,50 @@ function HowItWorks() {
   );
 }
 
+function GroqFreeGuide() {
+  const steps = [
+    { num: '1', title: 'Open Settings and clear old keys', desc: 'Go to Settings → Danger Zone → Clear All API Keys (optional reset).', image: '/assets/guides/groq-free/step-01.png' },
+    { num: '2', title: 'Choose Groq (FREE)', desc: 'In Free Providers, select Groq (FREE).', image: '/assets/guides/groq-free/step-02.png' },
+    { num: '3', title: 'Click Get API Key', desc: 'Open Groq provider settings and click Get API Key.', image: '/assets/guides/groq-free/step-03.png' },
+    { num: '4', title: 'Create key in Groq Console', desc: 'Set a key name and expiration preference, then create key.', image: '/assets/guides/groq-free/step-04.png' },
+    { num: '5', title: 'Copy key', desc: 'Copy the generated Groq key immediately.', image: '/assets/guides/groq-free/step-05.png' },
+    { num: '6', title: 'Paste and save in app', desc: 'Paste key into the Groq API key field and press Save.', image: '/assets/guides/groq-free/step-06.png' },
+    { num: '7', title: 'Test key', desc: 'Click Test Key and confirm the key is valid.', image: '/assets/guides/groq-free/step-07.png' },
+    { num: '8', title: 'Keep Groq (FREE) active', desc: 'Return to provider selection and ensure Groq (FREE) is selected.', image: '/assets/guides/groq-free/step-08.png' },
+    { num: '9', title: 'Set humanizer preferences', desc: 'Configure rewrite level, style, tone, target score, and max words.', image: '/assets/guides/groq-free/step-09.png' },
+    { num: '10', title: 'Run the pipeline', desc: 'Paste/upload text and run rewrite → post-process → polish.', image: '/assets/guides/groq-free/step-10.png' },
+    { num: '11', title: 'Review and export', desc: 'Review output, re-humanize if needed, then export.', image: '/assets/guides/groq-free/step-11.png' },
+  ];
+
+  return (
+    <section className="py-16">
+      <div className="container mx-auto px-4 max-w-7xl">
+        <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-3">Groq (Free) Setup Walkthrough</h2>
+        <p className="text-dark-400 text-center mb-10 max-w-3xl mx-auto">
+          This guide is specifically for <strong className="text-dark-200">Groq (Free)</strong> setup and usage.
+        </p>
+
+        <div className="grid lg:grid-cols-2 gap-6">
+          {steps.map((step) => (
+            <article key={step.num} className="glass-card rounded-2xl p-5 border border-dark-700/40">
+              <p className="text-xs text-accent-500 font-bold uppercase tracking-wider mb-2">Step {step.num}</p>
+              <h3 className="text-lg font-semibold text-white mb-2">{step.title}</h3>
+              <p className="text-dark-400 text-sm mb-4">{step.desc}</p>
+              <Image src={step.image} alt={`Groq (Free) setup step ${step.num}`} width={1600} height={900} className="w-full h-auto rounded-xl border border-dark-700/40" />
+            </article>
+          ))}
+        </div>
+
+        <div className="glass-card rounded-2xl p-5 mt-8 border border-red-500/30">
+          <p className="text-sm text-dark-200">
+            <strong className="text-red-400">Safety:</strong> Never share API keys in public messages or screenshots. If you need to remove saved keys, use <strong>Settings → Danger Zone → Clear All API Keys</strong>.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function TrustIndicators() {
   return (
     <section className="py-12">
@@ -159,6 +204,7 @@ export default function Home() {
         <>
           {!isReturningUser && <HeroSection />}
           {!isReturningUser && <HowItWorks />}
+          {!isReturningUser && <GroqFreeGuide />}
           <main className={`container mx-auto px-4 py-6 max-w-7xl ${isReturningUser ? 'pt-24' : ''}`} id="humanizer-section">
             <Humanizer showToast={showToast} onGoToSettings={() => setActiveTab('settings')} isFirstVisit={!isReturningUser} />
           </main>
