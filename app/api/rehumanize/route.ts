@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     const rehumanizePrompt = getRehumanizePrompt(flaggedSentences, level || 'aggressive', style || 'humanize', tone || 'conversational', customTone, purpose);
     
-    const result = await generateWithProvider(model, apiKey, rehumanizePrompt, '', { model: modelId, temperature: 1.0 });
+    const result = await generateWithProvider(model, apiKey, rehumanizePrompt, '', { model: modelId, temperature: 0.7, topP: 0.9 });
     const rehumanized = result
       .split('\n')
       .map(l => l.replace(/^\d+[\.\)]\s*/, '').trim())
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
           replacementIdx++;
         }
       }
-      const processedText = postprocess(newText, { style: (style || 'humanize') as any });
+      const processedText = postprocess(newText, { style: (style || 'humanize') as any, light: true });
       return NextResponse.json({ success: true, rehumanizedSentences: rehumanized, fullText: processedText });
     }
 

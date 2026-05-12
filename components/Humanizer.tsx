@@ -348,10 +348,17 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         });
         if (!resp.ok) break;
         const data = await resp.json();
-        currentFullText = data.fullText;
+        const candidateText = data.fullText;
+        const newDetection = detectAI(candidateText);
+        const newScore = newDetection.score;
 
-        const newDetection = detectAI(currentFullText);
-        currentScore = newDetection.score;
+        if (newScore >= currentScore) {
+          currentFullText = candidateText;
+          currentScore = newScore;
+        } else {
+          showToast('warning', `Stopped auto-refine: round ${round} would reduce score (${currentScore}% → ${newScore}%).`);
+          break;
+        }
       }
 
       const finalDetection = detectAI(currentFullText);
@@ -424,9 +431,16 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         if (!resp.ok) break;
         const data = await resp.json();
 
-        currentFullText = data.fullText;
-        const newDetection = detectAI(currentFullText);
-        currentScore = newDetection.score;
+        const candidateText = data.fullText;
+        const newDetection = detectAI(candidateText);
+        const newScore = newDetection.score;
+        if (newScore >= currentScore) {
+          currentFullText = candidateText;
+          currentScore = newScore;
+        } else {
+          showToast('warning', `Stopped: round ${round} would reduce score (${currentScore}% → ${newScore}%).`);
+          break;
+        }
       }
 
       const finalDetection = detectAI(currentFullText);

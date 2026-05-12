@@ -2,6 +2,42 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+async function extractPdfText(uint8: Uint8Array): Promise<string> {
+  const candidates = [
+    'pdfjs-dist/legacy/build/pdf.mjs',
+    'pdfjs-dist/build/pdf.mjs',
+  ];
+
+  let lastErr: unknown;
+  for (const mod of candidates) {
+    try {
+      const pdfjs = await import(mod);
+      if (pdfjs.GlobalWorkerOptions) pdfjs.GlobalWorkerOptions.workerSrc = '';
+
+      const doc = await pdfjs.getDocument({ data: uint8, useSystemFonts: true, disableWorker: true }).promise;
+      const pageTexts: string[] = [];
+
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        const lines = (content.items || [])
+          .map((item: any) => item?.str)
+          .filter((v: unknown) => typeof v === 'string' && v.trim().length > 0)
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (lines) pageTexts.push(lines);
+      }
+
+      return pageTexts.join('\n\n').trim();
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  throw lastErr instanceof Error ? lastErr : new Error('Failed to parse PDF');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -37,24 +73,7 @@ export async function POST(request: NextRequest) {
     if (ext === 'pdf') {
       const arrayBuffer = await file.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
-
-      // Use pdfjs-dist directly (pure JS, no native deps — works on Vercel serverless)
-      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-      // Disable worker for serverless environments
-      if (pdfjs.GlobalWorkerOptions) {
-        pdfjs.GlobalWorkerOptions.workerSrc = '';
-      }
-      const doc = await pdfjs.getDocument({ data: uint8, useSystemFonts: true }).promise;
-
-      let fullText = '';
-      for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i);
-        const content = await page.getTextContent();
-        const pageText = content.items
-          .map((item: any) => item.str)
-          .join(' ');
-        fullText += pageText + '\n';
-      }
+      const fullText = await extractPdfText(uint8);
 
       if (!fullText.trim()) {
         return NextResponse.json(
