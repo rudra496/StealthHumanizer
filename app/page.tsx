@@ -95,17 +95,17 @@ function HowItWorks() {
 
 function GroqFreeGuide() {
   const steps = [
-    { num: '1', title: 'Open Settings and clear old keys', desc: 'Go to Settings → Danger Zone → Clear All API Keys (optional reset).', image: '/assets/guides/groq-free/step-01.png' },
-    { num: '2', title: 'Choose Groq (FREE)', desc: 'In Free Providers, select Groq (FREE).', image: '/assets/guides/groq-free/step-02.png' },
-    { num: '3', title: 'Click Get API Key', desc: 'Open Groq provider settings and click Get API Key.', image: '/assets/guides/groq-free/step-03.png' },
-    { num: '4', title: 'Create key in Groq Console', desc: 'Set a key name and expiration preference, then create key.', image: '/assets/guides/groq-free/step-04.png' },
-    { num: '5', title: 'Copy key', desc: 'Copy the generated Groq key immediately.', image: '/assets/guides/groq-free/step-05.png' },
-    { num: '6', title: 'Paste and save in app', desc: 'Paste key into the Groq API key field and press Save.', image: '/assets/guides/groq-free/step-06.png' },
-    { num: '7', title: 'Test key', desc: 'Click Test Key and confirm the key is valid.', image: '/assets/guides/groq-free/step-07.png' },
-    { num: '8', title: 'Keep Groq (FREE) active', desc: 'Return to provider selection and ensure Groq (FREE) is selected.', image: '/assets/guides/groq-free/step-08.png' },
-    { num: '9', title: 'Set humanizer preferences', desc: 'Configure rewrite level, style, tone, target score, and max words.', image: '/assets/guides/groq-free/step-09.png' },
-    { num: '10', title: 'Run the pipeline', desc: 'Paste/upload text and run rewrite → post-process → polish.', image: '/assets/guides/groq-free/step-10.png' },
-    { num: '11', title: 'Review and export', desc: 'Review output, re-humanize if needed, then export.', image: '/assets/guides/groq-free/step-11.png' },
+    { num: '1', title: 'Open Settings and clear old keys', desc: 'Go to Settings → Danger Zone → Clear All API Keys (optional reset).', image: '/steps/1.jpg' },
+    { num: '2', title: 'Choose Groq (FREE)', desc: 'In Free Providers, select Groq (FREE).', image: '/steps/2.jpg' },
+    { num: '3', title: 'Click Get API Key', desc: 'Open Groq provider settings and click Get API Key.', image: '/steps/3.jpg' },
+    { num: '4', title: 'Create key in Groq Console', desc: 'Set a key name and expiration preference, then create key.', image: '/steps/4.jpg' },
+    { num: '5', title: 'Copy key', desc: 'Copy the generated Groq key immediately.', image: '/steps/5.jpg' },
+    { num: '6', title: 'Paste and save in app', desc: 'Paste key into the Groq API key field and press Save.', image: '/steps/6.jpg' },
+    { num: '7', title: 'Test key', desc: 'Click Test Key and confirm the key is valid.', image: '/steps/7.jpg' },
+    { num: '8', title: 'Keep Groq (FREE) active', desc: 'Return to provider selection and ensure Groq (FREE) is selected.', image: '/steps/8.jpg' },
+    { num: '9', title: 'Set humanizer preferences', desc: 'Configure rewrite level, style, tone, target score, and max words.', image: '/steps/9.jpg' },
+    { num: '10', title: 'Run the pipeline', desc: 'Paste/upload text and run rewrite → post-process → polish.', image: '/steps/10.jpg' },
+    { num: '11', title: 'Review and export', desc: 'Review output, re-humanize if needed, then export.', image: '/steps/11.jpg' },
   ];
 
   return (
