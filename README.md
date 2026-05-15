@@ -107,6 +107,42 @@ Or use it live at [stealthhumanizer.vercel.app](https://stealthhumanizer.vercel.
 
 ---
 
+## CLI
+
+StealthHumanizer now ships an initial command-line interface for local
+humanization and detector checks.
+
+```bash
+# Run without installing a global binary
+npm run cli -- detect --text "Furthermore, it is important to note that..."
+
+# Humanize from stdin with the Gemini provider
+export GEMINI_API_KEY="your-key"
+echo "Draft text..." | npm run cli -- humanize --model gemini --level medium
+
+# Read and write files
+npm run cli -- humanize --input draft.txt --output humanized.txt --style academic
+```
+
+The package exposes both `stealthhumanizer` and `stealth-humanize` binaries
+when built or linked:
+
+```bash
+npm run cli:build
+npm link
+stealthhumanizer providers
+```
+
+Useful commands:
+
+- `humanize` - runs the full multi-pass rewriting pipeline
+- `detect` - scores text with the built-in AI-signal detector, no API key needed
+- `providers` - lists provider ids, default models, and API key environment variables
+
+Run `npm run cli -- --help` for the full option list.
+
+---
+
 ## Groq (Free) Setup & Demo Walkthrough
 
 This walkthrough is specifically for the **Groq (Free)** provider flow.
@@ -236,7 +272,7 @@ Read [CONTRIBUTING.md](./CONTRIBUTING.md) for full guidelines.
 ## Roadmap
 
 - [ ] Browser extension (Chrome/Firefox)
-- [ ] CLI tool (`npx stealthhumanizer`)
+- [x] CLI tool (`stealthhumanizer`, initial local/package binary)
 - [ ] Fine-tuned local models for offline use
 - [ ] Real detector benchmarking dashboard
 - [ ] API service layer for programmatic access

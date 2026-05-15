@@ -2,15 +2,25 @@
   "name": "stealthhumanizer",
   "version": "2.1.0",
   "private": true,
+  "files": [
+    "dist",
+    "data/models/corpus-style-model.json",
+    "public/corpus-style-model.json",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=20"
   },
   "bin": {
-    "stealth-humanize": "bin/cli.ts"
+    "stealthhumanizer": "dist/bin/cli.js",
+    "stealth-humanize": "dist/bin/cli.js"
   },
   "scripts": {
     "cli": "tsx bin/cli.ts",
     "cli:build": "tsc --project tsconfig.cli.json",
+    "cli:smoke": "npm run cli -- --help && npm run cli -- detect --text \"Furthermore, it is important to note that this solution demonstrates the potential to optimize workflows.\"",
+    "prepack": "npm run cli:build",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -31,6 +41,7 @@
     "pipeline:q1-ready:skip-install": "node scripts/papers/complete-ready-pipeline.mjs --skip-install"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.16.0",
     "mammoth": "^1.12.0",
@@ -46,7 +57,6 @@
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.5.0",
-    "dotenv": "^17.4.2",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.2.6",
     "postcss": "^8.5.15",

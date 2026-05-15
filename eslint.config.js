@@ -4,6 +4,9 @@ const nextTypeScript = require('eslint-config-next/typescript'); // eslint-disab
 
 /** @type {import('eslint').Linter.Config[]} */
 const config = [
+  {
+    ignores: ['dist/**'],
+  },
   ...nextConfig,
   ...nextTypeScript,
   {
