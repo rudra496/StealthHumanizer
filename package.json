@@ -20,6 +20,7 @@
     "cli": "tsx bin/cli.ts",
     "cli:build": "tsc --project tsconfig.cli.json",
     "cli:smoke": "npm run cli -- --help && npm run cli -- detect --text \"Furthermore, it is important to note that this solution demonstrates the potential to optimize workflows.\"",
+    "test:cli": "npm run cli:build && node scripts/tests/cli.test.mjs",
     "prepack": "npm run cli:build",
     "dev": "next dev",
     "build": "next build",

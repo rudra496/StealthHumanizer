@@ -141,6 +141,9 @@ Useful commands:
 
 Run `npm run cli -- --help` for the full option list.
 
+Run `npm run test:cli` to build the packaged CLI entry point and execute the
+CLI regression suite.
+
 ---
 
 ## Groq (Free) Setup & Demo Walkthrough

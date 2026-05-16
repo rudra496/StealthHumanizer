@@ -32,6 +32,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: CLI regression
+        run: npm run test:cli
+
       - name: PR2 analysis smoke
         run: npm run papers:analyze -- --config data/papers/analysis.smoke.config.json --run-id ci-pr2-smoke
 
