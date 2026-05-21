@@ -8,7 +8,7 @@ Use the following professional replies for the currently open issues after verif
 
 Hi @Joseph1705 — thanks for reporting this.
 
-I reviewed the API-key flow and applied a reliability improvement so saved keys are now normalized (trimmed/cleaned) before use. This helps avoid false failures caused by accidental whitespace or stale locally stored values.
+I reviewed the API-key flow and applied a reliability improvement so keys are now trimmed before runtime use. This helps avoid false failures caused by accidental whitespace in local values.
 
 Please try this:
 1. Pull latest changes.
@@ -82,7 +82,7 @@ This keeps onboarding easy and improves the chance of successful external contri
 
 ---
 
-## Additional high-impact issue ideas
+## Suggested future issues (growth + contributor engagement)
 
 If you want stronger contributor engagement and higher-quality stars/follows, consider opening these:
 
@@ -97,4 +97,3 @@ If you want stronger contributor engagement and higher-quality stars/follows, co
 
 4. **“Beginner-friendly extension scaffold”**  
    Keep only manifest/popup/content skeleton in first PR and label it `good first issue`.
-

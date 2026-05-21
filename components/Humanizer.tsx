@@ -185,7 +185,9 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   }, [inputText, result, level]);
 
   const getApiCredentials = () => {
-    const keys = getApiKeys();
+    const keys = Object.fromEntries(
+      Object.entries(getApiKeys()).map(([provider, key]) => [provider, key?.trim()])
+    ) as Record<string, string | undefined>;
     const providerId = (keys[preferredModel] ? preferredModel : Object.keys(keys).find(k => keys[k]?.trim()) || 'gemini') as ModelProvider;
     const apiKey = keys[providerId];
     return { providerId, apiKey };
@@ -206,7 +208,9 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
 
     try {
       // Get all available API keys
-      const allApiKeys = getApiKeys();
+      const allApiKeys = Object.fromEntries(
+        Object.entries(getApiKeys()).map(([provider, key]) => [provider, key?.trim()])
+      );
 
       const response = await fetch('/api/humanize', {
         method: 'POST',

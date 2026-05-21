@@ -8,26 +8,12 @@ const KEYS = {
   VISITED: 'stealthhumanizer_visited',
 };
 
-function normalizeApiKeys(keys: ApiKeys): ApiKeys {
-  const normalized: ApiKeys = {};
-  for (const [provider, value] of Object.entries(keys || {})) {
-    const trimmed = typeof value === 'string' ? value.trim() : '';
-    if (trimmed) normalized[provider] = trimmed;
-  }
-  return normalized;
-}
-
 // API Keys
 export function getApiKeys(): ApiKeys {
   if (typeof window === 'undefined') return {};
   try {
     const stored = localStorage.getItem(KEYS.API_KEYS);
-    const parsed = stored ? JSON.parse(stored) : {};
-    const normalized = normalizeApiKeys(parsed);
-    if (stored && JSON.stringify(parsed) !== JSON.stringify(normalized)) {
-      localStorage.setItem(KEYS.API_KEYS, JSON.stringify(normalized));
-    }
-    return normalized;
+    return stored ? JSON.parse(stored) : {};
   } catch {
     return {};
   }
@@ -35,7 +21,7 @@ export function getApiKeys(): ApiKeys {
 
 export function setApiKeys(keys: ApiKeys): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(KEYS.API_KEYS, JSON.stringify(normalizeApiKeys(keys)));
+  localStorage.setItem(KEYS.API_KEYS, JSON.stringify(keys));
 }
 
 export function clearApiKeys(): void {
