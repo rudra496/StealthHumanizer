@@ -23,7 +23,14 @@ export default function Settings({ showToast }: SettingsProps) {
   useEffect(() => { setKeys(getApiKeys()); }, []);
 
   const handleSave = (id: string, key: string) => {
-    const newKeys = { ...keys, [id]: key || undefined };
+    // Trim whitespace and validate the key is not empty
+    const trimmedKey = key?.trim();
+    if (!trimmedKey) {
+      showToast('warning', 'API key cannot be empty');
+      return;
+    }
+    
+    const newKeys = { ...keys, [id]: trimmedKey };
     setKeys(newKeys);
     setApiKeys(newKeys);
     showToast('success', `${getProvider(id as any)?.name || id} API key saved!`);
@@ -33,17 +40,23 @@ export default function Settings({ showToast }: SettingsProps) {
 
   const handleTest = async (id: string) => {
     const key = keys[id];
-    if (!key) { showToast('warning', 'No API key to test'); return; }
+    if (!key || !key.trim()) { 
+      showToast('warning', 'No API key to test'); 
+      return; 
+    }
     setTesting(id);
     showToast('info', `Testing ${id}...`);
     try {
-      const valid = await testApiKey(id as any, key);
+      const valid = await testApiKey(id as any, key.trim());
       setTesting(null);
-      if (valid) showToast('success', `${id} key is valid! ✅`);
-      else showToast('error', `${id} key is invalid ❌`);
+      if (valid) {
+        showToast('success', `${id} key is valid! ✅`);
+      } else {
+        showToast('error', `${id} key is invalid. Please check your API key and try again. ❌`);
+      }
     } catch (err: any) {
       setTesting(null);
-      showToast('error', `Error: ${err.message}`);
+      showToast('error', `Error testing key: ${err.message || 'Unknown error'}`);
     }
   };
 

@@ -557,10 +557,16 @@ Return ONLY the ${count} alternative sentences, one per line. No numbering, no e
 // ==================== TEST API KEY ====================
 
 export async function testApiKey(provider: ModelProvider, apiKey: string): Promise<boolean> {
+  if (!apiKey || !apiKey.trim()) {
+    return false;
+  }
+  
   try {
-    await generateWithProvider(provider, apiKey, 'You are a test assistant.', 'Say "ok" and nothing else.', { maxTokens: 10 });
+    await generateWithProvider(provider, apiKey.trim(), 'You are a test assistant.', 'Say "ok" and nothing else.', { maxTokens: 10 });
     return true;
-  } catch {
+  } catch (error) {
+    // Log error for debugging but return false for invalid key
+    console.error(`API key test failed for ${provider}:`, error);
     return false;
   }
 }

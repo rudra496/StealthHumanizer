@@ -614,6 +614,23 @@ function aggressiveSynonymSwap(text: string, style?: StylePreset): string {
     [/\ba variety of\b/gi, ['different', 'various', 'all kinds of']],
     [/\ba multitude of\b/gi, isFormal ? ['many', 'numerous', 'a significant number of'] : ['many', 'a lot of', 'tons of']],
     [/\ba significant number of\b/gi, isFormal ? ['many', 'numerous', 'a considerable number of'] : ['many', 'a lot of', 'quite a few']],
+    // Additional AI-generated phrases (Issue #91)
+    [/\bin today's digital landscape\b/gi, ['now', 'these days', 'in the current environment']],
+    [/\bin the realm of\b/gi, isFormal ? ['in the field of', 'in the area of', 'when it comes to'] : ['in', 'when it comes to', 'for']],
+    [/\bas we navigate\b/gi, ['as we deal with', 'as we work through', 'when dealing with']],
+    [/\btapestry of\b/gi, ['mix of', 'variety of', 'collection of']],
+    [/\bshowcase\b/gi, ['show', 'display', 'demonstrate', 'highlight']],
+    [/\brobust\b/gi, isFormal ? ['strong', 'solid', 'well-built'] : ['strong', 'solid', 'reliable']],
+    [/\bdynamic\b/gi, ['active', 'changing', 'flexible', 'adaptable']],
+    [/\bmeticulous(ly)?\b/gi, isFormal ? ['careful', 'thorough', 'detailed'] : ['careful', 'thorough', 'precise']],
+    [/\bempowers?\b/gi, ['enables', 'allows', 'helps', 'lets']],
+    [/\brevolutionize\b/gi, ['change', 'transform', 'improve dramatically']],
+    [/\bcutting-edge\b/gi, ['latest', 'newest', 'modern', 'advanced']],
+    [/\bstate-of-the-art\b/gi, ['latest', 'most advanced', 'top-of-the-line']],
+    [/\bgame-changer\b/gi, ['big deal', 'major shift', 'important development']],
+    [/\bparadigm shift\b/gi, ['major change', 'fundamental shift', 'big shift']],
+    [/\bin the ever-evolving\b/gi, ['in the changing', 'in the growing']],
+    [/\bmeticulously crafted\b/gi, ['carefully made', 'well-designed', 'thoughtfully built']],
   ];
 
   let result = text;
