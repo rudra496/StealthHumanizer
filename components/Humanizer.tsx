@@ -185,9 +185,8 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   }, [inputText, result, level]);
 
   const getApiCredentials = () => {
-    let keys: Record<string, string | undefined> = {};
-    try { const s = localStorage.getItem('stealthhumanizer_api_keys'); if (s) keys = JSON.parse(s); } catch {}
-    const providerId = (keys[preferredModel] ? preferredModel : Object.keys(keys).find(k => keys[k]) || 'gemini') as ModelProvider;
+    const keys = getApiKeys();
+    const providerId = (keys[preferredModel] ? preferredModel : Object.keys(keys).find(k => keys[k]?.trim()) || 'gemini') as ModelProvider;
     const apiKey = keys[providerId];
     return { providerId, apiKey };
   };
@@ -207,8 +206,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
 
     try {
       // Get all available API keys
-      let allApiKeys: Record<string, string | undefined> = {};
-      try { const s = localStorage.getItem('stealthhumanizer_api_keys'); if (s) allApiKeys = JSON.parse(s); } catch {}
+      const allApiKeys = getApiKeys();
 
       const response = await fetch('/api/humanize', {
         method: 'POST',

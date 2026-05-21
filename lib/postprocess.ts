@@ -603,7 +603,7 @@ function aggressiveSynonymSwap(text: string, style?: StylePreset): string {
     [/\bin summary\b/gi, ['']],
     [/\bto summarize\b/gi, ['']],
     [/\bit is important to note\b/gi, ['']],
-    [/\bit is worth noting\b/gi, ['']],
+    [/\bit is worth noting(?: that)?\b/gi, ['']],
     [/\bit is worth mentioning\b/gi, ['']],
     [/\bdelves? into\b/gi, ['looks at', 'digs into', 'explores']],
     [/\blandscape\b/gi, ['space', 'area', 'world', 'field']],
