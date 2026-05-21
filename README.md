@@ -103,6 +103,8 @@ Open [http://localhost:3000](http://localhost:3000) and add your API key in Sett
 
 Or use it live at [stealthhumanizer.vercel.app](https://stealthhumanizer.vercel.app/).
 
+> 💡 **Troubleshooting?** See our [comprehensive troubleshooting guide](./docs/TROUBLESHOOTING.md) for common issues and solutions.
+
 ---
 
 ## CLI Usage
