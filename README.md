@@ -105,6 +105,28 @@ Or use it live at [stealthhumanizer.vercel.app](https://stealthhumanizer.vercel.
 
 ---
 
+## CLI Usage
+
+You can run the CLI directly in this repo:
+
+```bash
+npm run cli -- "Quick inline text to humanize"
+echo "Some AI-generated text." | npm run cli
+npm run cli -- -i input.txt -o output.txt
+```
+
+Flags:
+
+- `-i, --input <file>` read text from a file
+- `-o, --output <file>` write output to a file (stdout by default)
+- `--model <provider>` choose provider (`openai`, `gemini`, `claude`, `groq`, etc.)
+- `--level`, `--style`, `--tone`, `--language`, `--target`, `--json`
+- `-h, --help` and `-v, --version`
+
+The CLI reads provider API keys from environment variables (for example `OPENAI_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `GROQ_API_KEY`).
+
+---
+
 ## Groq (Free) Setup & Demo Walkthrough
 
 This walkthrough is specifically for the **Groq (Free)** provider flow.
