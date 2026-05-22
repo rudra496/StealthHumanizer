@@ -37,6 +37,7 @@ This guide helps you resolve common issues with StealthHumanizer.
    - [Anthropic Status](https://status.anthropic.com/)
 
 4. **Clear Browser Storage**
+
    ```javascript
    // Open browser console (F12) and run:
    localStorage.clear();
@@ -111,11 +112,13 @@ This guide helps you resolve common issues with StealthHumanizer.
 **Solutions**:
 
 1. **Check Node Version**
+
    ```bash
    node --version  # Should be 20 or higher
    ```
 
 2. **Clear npm Cache**
+
    ```bash
    npm cache clean --force
    rm -rf node_modules package-lock.json
@@ -123,6 +126,7 @@ This guide helps you resolve common issues with StealthHumanizer.
    ```
 
 3. **Use npm Instead of Other Package Managers**
+
    ```bash
    npm install
    # Not: yarn install or pnpm install (unless you know what you're doing)
@@ -133,12 +137,14 @@ This guide helps you resolve common issues with StealthHumanizer.
 **Solutions**:
 
 1. **Check TypeScript Errors**
+
    ```bash
    npm run build
    # Read the error messages carefully
    ```
 
 2. **Ensure Dependencies Are Installed**
+
    ```bash
    npm ci
    ```
@@ -153,6 +159,7 @@ This guide helps you resolve common issues with StealthHumanizer.
    - Kill any process using port 3000
 
 2. **Clear Next.js Cache**
+
    ```bash
    rm -rf .next
    npm run dev
