@@ -30,54 +30,9 @@
  */
 
 import 'dotenv/config';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { humanizeText } from '../lib/humanizer';
 import type { HumanizationOptions, ModelProvider, RewriteLevel, StylePreset, TonePreset } from '../lib/types';
-
-type CliOptions = {
-  text: string | null;
-  inputPath?: string;
-  outputPath?: string;
-  level: RewriteLevel;
-  style: StylePreset;
-  tone: TonePreset;
-  customTone?: string;
-  model: ModelProvider;
-  language: string;
-  domain?: string;
-  targetScore: number;
-  aggressiveSynonyms: boolean;
-  json: boolean;
-  help: boolean;
-  version: boolean;
-};
-
-const HELP_TEXT = `StealthHumanizer CLI
-
-Usage:
-  stealthhumanizer [options] [text]
-  stealth-humanize [options] [text]
-  echo "Your text" | stealthhumanizer [options]
-
-Options:
-  -i, --input <file>         Read input text from a file
-  -o, --output <file>        Write output text to a file (stdout by default)
-      --level <value>        light | medium | aggressive | ninja (default: medium)
-      --style <value>        humanize | academic | casual | professional | creative | technical (default: casual)
-      --tone <value>         conversational | academic-formal | academic-casual | journalistic |
-                             creative-writing | professional | technical | persuasive |
-                             storytelling | humorous | emotional | analytical | custom (default: conversational)
-      --model <value>        gemini | openai | claude | groq | mistral | cohere | together |
-                             openrouter | cerebras | deepinfra | huggingface | cloudflare | zai (default: openai)
-      --language <code>      BCP-47 language code (default: en)
-      --domain <text>        Academic domain hint (optional)
-      --target <0-100>       Target humanness score (default: 80)
-      --style-guide <file>   Path to writing style guide file (sets tone to custom)
-      --no-aggressive-synonyms
-      --json                 Output full JSON result
-  -h, --help                 Show help
-  -v, --version              Show version
-`;
 
 // ── env var map ──────────────────────────────────────────────────────────────
 const API_KEY_ENV: Record<ModelProvider, string> = {
@@ -97,12 +52,23 @@ const API_KEY_ENV: Record<ModelProvider, string> = {
 };
 
 // ── arg parser ───────────────────────────────────────────────────────────────
-function parseArgs(argv: string[]): CliOptions {
+function parseArgs(argv: string[]): {
+  text: string | null;
+  level: RewriteLevel;
+  style: StylePreset;
+  tone: TonePreset;
+  customTone?: string;
+  model: ModelProvider;
+  language: string;
+  domain?: string;
+  targetScore: number;
+  aggressiveSynonyms: boolean;
+  json: boolean;
+  help: boolean;
+} {
   const args = argv.slice(2);
   const opts = {
     text: null as string | null,
-    inputPath: undefined as string | undefined,
-    outputPath: undefined as string | undefined,
     level: 'medium' as RewriteLevel,
     style: 'casual' as StylePreset,
     tone: 'conversational' as TonePreset,
@@ -114,7 +80,6 @@ function parseArgs(argv: string[]): CliOptions {
     aggressiveSynonyms: true,
     json: false,
     help: false,
-    version: false,
   };
 
   const positional: string[] = [];
@@ -123,20 +88,10 @@ function parseArgs(argv: string[]): CliOptions {
     const a = args[i];
     if (a === '--help' || a === '-h') {
       opts.help = true;
-    } else if (a === '--version' || a === '-v') {
-      opts.version = true;
     } else if (a === '--json') {
       opts.json = true;
     } else if (a === '--no-aggressive-synonyms') {
       opts.aggressiveSynonyms = false;
-    } else if (a === '--input' || a === '-i') {
-      const val = args[++i];
-      if (!val) { process.stderr.write(`Missing value for ${a}\n`); process.exit(1); }
-      opts.inputPath = val;
-    } else if (a === '--output' || a === '-o') {
-      const val = args[++i];
-      if (!val) { process.stderr.write(`Missing value for ${a}\n`); process.exit(1); }
-      opts.outputPath = val;
     } else if (a === '--level' || a === '--style' || a === '--tone' || a === '--model' ||
                a === '--language' || a === '--domain' || a === '--target' || a === '--style-guide') {
       const val = args[++i];
@@ -152,17 +107,9 @@ function parseArgs(argv: string[]): CliOptions {
         opts.customTone = readFileSync(val, 'utf8');
         opts.tone = 'custom';
       }
-    } else if (!a.startsWith('-')) {
+    } else if (!a.startsWith('--')) {
       positional.push(a);
-    } else {
-      process.stderr.write(`Unknown option: ${a}\n`);
-      process.exit(1);
     }
-  }
-
-  if (positional.length > 0 && opts.inputPath) {
-    process.stderr.write('Error: provide text either as argument or via --input, not both\n');
-    process.exit(1);
   }
 
   if (positional.length > 0) opts.text = positional.join(' ');
@@ -185,29 +132,18 @@ async function main() {
   const opts = parseArgs(process.argv);
 
   if (opts.help) {
-    process.stdout.write(HELP_TEXT + '\n');
-    process.exit(0);
-  }
-  if (opts.version) {
-    const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version?: string };
-    process.stdout.write(`${packageJson.version || '0.0.0'}\n`);
+    const helpText = (await import('fs')).readFileSync(new URL(import.meta.url).pathname, 'utf8')
+      .split('\n').slice(1, 25).map(l => l.replace(/^\s*\*\s?/, '')).join('\n');
+    process.stdout.write(helpText + '\n');
     process.exit(0);
   }
 
   // Resolve text
   const isStdinTTY = process.stdin.isTTY;
   let text = opts.text;
-  if (!text && opts.inputPath) {
-    try {
-      text = readFileSync(opts.inputPath, 'utf8').trim();
-    } catch {
-      process.stderr.write(`Error: could not read input file: ${opts.inputPath}\n`);
-      process.exit(1);
-    }
-  }
   if (!text) {
     if (isStdinTTY) {
-      process.stderr.write('Error: provide text as argument, --input file, or via stdin\n');
+      process.stderr.write('Error: provide text as argument or via stdin\n');
       process.exit(1);
     }
     text = await readStdin();
@@ -246,19 +182,9 @@ async function main() {
     const result = await humanizeText(text, options, apiKey, onProgress);
 
     if (opts.json) {
-      const payload = JSON.stringify(result, null, 2) + '\n';
-      if (opts.outputPath) {
-        writeFileSync(opts.outputPath, payload, 'utf8');
-      } else {
-        process.stdout.write(payload);
-      }
+      process.stdout.write(JSON.stringify(result, null, 2) + '\n');
     } else {
-      const payload = result.fullText + '\n';
-      if (opts.outputPath) {
-        writeFileSync(opts.outputPath, payload, 'utf8');
-      } else {
-        process.stdout.write(payload);
-      }
+      process.stdout.write(result.fullText + '\n');
       process.stderr.write(
         `\n✓ Done — score: ${result.finalScore}% human | passes: ${result.passes} | ` +
         `words: ${result.wordCount.input}→${result.wordCount.output} | model: ${result.modelName}\n`

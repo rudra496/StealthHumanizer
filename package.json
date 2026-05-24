@@ -6,9 +6,7 @@
     "node": ">=20"
   },
   "bin": {
-    "stealthhumanizer": "bin/cli.ts",
-    "stealth-humanize": "bin/cli.ts",
-    "sh-cli": "bin/cli.ts"
+    "stealth-humanize": "bin/cli.ts"
   },
   "scripts": {
     "cli": "tsx bin/cli.ts",
@@ -24,7 +22,6 @@
     "model:train": "node scripts/model/train-framework.mjs",
     "model:eval": "node scripts/model/evaluate-framework.mjs",
     "test:integration": "node scripts/tests/integration-smoke.mjs",
-    "test:cli": "node scripts/tests/cli-smoke.mjs",
     "test:pr2-integrity": "node scripts/tests/pr2-integrity-schema-check.mjs",
     "pipeline:complete": "node scripts/tests/complete-e2e.mjs",
     "pipeline:q1-batch": "node scripts/papers/batch-download-and-train.mjs",
