@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RewriteLevel, StylePreset, TonePreset, ModelProvider } from '@/lib/types';
-import { getSystemPrompt, getRehumanizePrompt, getSelfCheckPrompt, getFixPrompt, getCorpusAwareSystemPrompt, LEVEL_PARAMS } from '@/lib/prompts';
-import { generateWithProvider, getProvider } from '@/lib/providers';
+import { RewriteLevel, StylePreset, ModelProvider } from '@/lib/types';
+import { getSystemPrompt, getSelfCheckPrompt, getCorpusAwareSystemPrompt, LEVEL_PARAMS } from '@/lib/prompts';
+import { getProvider, isCliOnlyProvider } from '@/lib/providers';
+import { generateWithProvider } from '@/lib/server/providers-runtime';
 import { detectAI } from '@/lib/detector';
 import { postprocess, corpusAwarePostprocess } from '@/lib/postprocess';
 import { loadStyleModelAsync, loadStyleModel, hasStyleModel } from '@/lib/style-model';
@@ -76,6 +77,12 @@ export async function POST(request: NextRequest) {
     } = await request.json();
 
     if (!text || !model || !apiKey) return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    // Reject CLI-only runners on the primary model AND anywhere in the chain —
+    // chainModels flows through lib/chain into the CLI-capable runtime, so an
+    // unguarded chain entry would otherwise spawn the server's local CLI.
+    const cliOnlyRequested = [model, ...(Array.isArray(chainModelIds) ? chainModelIds : [])]
+      .find((id) => isCliOnlyProvider(id as ModelProvider));
+    if (cliOnlyRequested) return NextResponse.json({ success: false, error: `Provider "${cliOnlyRequested}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
     if (countWords(text) > 10000) return NextResponse.json({ success: false, error: 'Exceeds 10,000 word limit' }, { status: 400 });
     if (Array.isArray(batchTexts) && batchTexts.length > MAX_BATCH_SIZE) {
       return NextResponse.json({ success: false, error: `Batch size exceeds limit (${MAX_BATCH_SIZE}).` }, { status: 400 });

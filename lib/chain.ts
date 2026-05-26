@@ -2,7 +2,8 @@
 // Chain rewrites through different LLM models to mix statistical fingerprints.
 
 import { ModelProvider } from './types';
-import { generateWithProvider, getProvider } from './providers';
+import { getProvider } from './providers';
+import { generateWithProvider } from './server/providers-runtime';
 import { getSystemPrompt } from './prompts';
 import { postprocess } from './postprocess';
 

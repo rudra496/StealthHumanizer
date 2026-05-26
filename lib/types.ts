@@ -2,11 +2,12 @@
 
 // ==================== PROVIDER TYPES ====================
 
-export type ModelProvider = 
-  | 'gemini' | 'openai' | 'claude' 
-  | 'groq' | 'mistral' | 'cohere' 
+export type ModelProvider =
+  | 'gemini' | 'openai' | 'claude'
+  | 'groq' | 'mistral' | 'cohere'
   | 'together' | 'openrouter' | 'cerebras'
-  | 'deepinfra' | 'huggingface' | 'cloudflare' | 'zai';
+  | 'deepinfra' | 'huggingface' | 'cloudflare' | 'zai'
+  | 'claude-code' | 'codex';
 
 export interface Provider {
   id: ModelProvider;
@@ -19,6 +20,10 @@ export interface Provider {
   defaultModel: string;
   models: string[];
   placeholder: string;
+  /** Runs as a local subprocess (e.g. Claude Code, Codex CLI). No API key needed;
+   *  the binary handles auth via its own login state. Not available in browser
+   *  or serverless runtimes. */
+  cliOnly?: boolean;
 }
 
 // ==================== HUMANIZATION TYPES ====================

@@ -52,6 +52,9 @@ const API_KEY_ENV: Record<ModelProvider, string> = {
   huggingface: 'HUGGINGFACE_API_KEY',
   cloudflare: 'CLOUDFLARE_API_KEY',
   zai: 'ZAI_API_KEY',
+  // CLI-runner providers handle auth via their own login state — no env var.
+  'claude-code': '',
+  codex: '',
 };
 
 const VALUE_FLAGS = new Set([
@@ -294,6 +297,11 @@ function resolveProvider(parsed: ParsedCli): ModelProvider {
 }
 
 function resolveApiKey(parsed: ParsedCli, provider: ModelProvider): string {
+  // CLI-runner providers authenticate via their own subprocess login, so
+  // there's no API key to resolve. Returning '' satisfies the downstream
+  // signature; the adapter ignores it.
+  if (getProvider(provider)?.cliOnly) return '';
+
   const explicitApiKey = flagString(parsed, 'api-key');
   if (explicitApiKey) return explicitApiKey;
 
@@ -415,9 +423,10 @@ function formatProvidersJson(): string {
     id: provider.id,
     name: provider.name,
     free: provider.free,
+    cliOnly: provider.cliOnly === true,
     defaultModel: provider.defaultModel,
     models: provider.models,
-    env: API_KEY_ENV[provider.id],
+    env: provider.cliOnly ? null : API_KEY_ENV[provider.id],
     getApiKeyUrl: provider.getApiKeyUrl,
     docsUrl: provider.docsUrl,
   }));
@@ -432,7 +441,7 @@ function formatProvidersTable(): string {
   const rows = PROVIDERS.map((provider) => ({
     provider: provider.id,
     free: provider.free ? 'yes' : 'no',
-    env: API_KEY_ENV[provider.id],
+    env: provider.cliOnly ? '(cli)' : API_KEY_ENV[provider.id],
     defaultModel: provider.defaultModel,
     name: provider.name,
   }));
@@ -517,6 +526,11 @@ Humanization options:
 API keys:
   --api-key <key>           Pass an API key directly
   --api-key-env <name>      Read the API key from a custom environment variable
+
+CLI-runner providers (no API key needed):
+  --model claude-code       Spawns your local "claude" CLI (Claude Code)
+  --model codex             Spawns your local "codex" CLI (OpenAI Codex)
+  Overrides: STEALTHHUMANIZER_CLAUDE_CODE_BIN, STEALTHHUMANIZER_CODEX_BIN
 
 Run "stealthhumanizer providers" to see provider ids and default env vars.`;
 }

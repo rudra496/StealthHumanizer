@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RewriteLevel, StylePreset, TonePreset, ModelProvider } from '@/lib/types';
 import { getRehumanizePrompt } from '@/lib/prompts';
-import { generateWithProvider, getProvider } from '@/lib/providers';
+import { getProvider, isCliOnlyProvider } from '@/lib/providers';
+import { generateWithProvider } from '@/lib/server/providers-runtime';
 import { postprocess } from '@/lib/postprocess';
 
 export async function POST(request: NextRequest) {
@@ -9,6 +9,9 @@ export async function POST(request: NextRequest) {
     const { flaggedSentences, level, style, tone, customTone, model, apiKey, fullText, purpose } = await request.json();
     if (!flaggedSentences?.length || !model || !apiKey) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    }
+    if (isCliOnlyProvider(model)) {
+      return NextResponse.json({ success: false, error: `Provider "${model}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
     }
 
     const providerInfo = getProvider(model);
