@@ -12,7 +12,7 @@ import { TONE_CONFIGS, SAMPLE_AI_TEXT, SAMPLE_TECHNICAL_TEXT, PURPOSE_CONFIGS } 
 import { detectAI, getScoreColor, getScoreBarColor } from '@/lib/detector';
 import { getReadabilityLabel } from '@/lib/readability';
 import { countWords, downloadAsTxt, downloadAsDocx, downloadAsMarkdown, getApiKeys } from '@/lib/storage';
-import { PROVIDERS } from '@/lib/providers';
+import { WEB_PROVIDERS as PROVIDERS } from '@/lib/providers';
 import dynamic from 'next/dynamic';
 
 const ComparisonChart = dynamic(

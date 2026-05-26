@@ -3,7 +3,8 @@
 import { HumanizationOptions, HumanizationResult, SentenceResult } from './types';
 import { getSystemPrompt, getRehumanizePrompt, getCorpusAwareSystemPrompt } from './prompts';
 import { getCorpusCalibratedThresholds, hasStyleModel, loadStyleModelAsync } from './style-model';
-import { generateWithProvider, getProvider, generateAlternatives } from './providers';
+import { getProvider } from './providers';
+import { generateWithProvider, generateAlternatives } from './server/providers-runtime';
 import { detectAI } from './detector';
 import { postprocess, corpusAwarePostprocess } from './postprocess';
 import { chunkText, countWords, addToHistory } from './storage';

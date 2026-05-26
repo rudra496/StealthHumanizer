@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Layers, Plus, Trash2, Zap, Copy, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { getApiKeys } from '@/lib/storage';
-import { PROVIDERS } from '@/lib/providers';
+import { WEB_PROVIDERS as PROVIDERS } from '@/lib/providers';
 import { ModelProvider } from '@/lib/types';
 
 interface BatchItem {

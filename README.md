@@ -141,6 +141,41 @@ Useful commands:
 
 Run `npm run cli -- --help` for the full option list.
 
+### Local CLI-runner providers (no API key)
+
+Two providers run a local CLI you already have logged in, as a subprocess,
+instead of calling an HTTP API. They use the binary's own auth, so no API key
+is required:
+
+```bash
+# Uses your local Claude Code login
+stealthhumanizer humanize --model claude-code -i draft.txt
+
+# Uses your local OpenAI Codex login
+echo "Draft text..." | stealthhumanizer humanize --model codex
+```
+
+- `--model claude-code` spawns your local `claude` CLI (Claude Code)
+- `--model codex` spawns your local `codex` CLI (OpenAI Codex)
+- Point at a non-default binary with `STEALTHHUMANIZER_CLAUDE_CODE_BIN` or
+  `STEALTHHUMANIZER_CODEX_BIN`
+- CLI-only: these are skipped by auto-selection and are not available in the
+  browser or serverless runtimes (they spawn a subprocess). The web API rejects
+  them (including in model chains) so a browser user can't make a self-hosted
+  server spawn its logged-in CLI.
+
+**Security note — untrusted input.** The text being humanized is treated as
+untrusted (it can contain prompt-injection). The runners are confined so an
+injected instruction can't make the agent act:
+
+- `claude-code` runs with `--tools ""`, which fully disables all tools — it
+  cannot read/write files or run commands. Preferred for untrusted input.
+- `codex` has no "disable all tools" switch, so it is confined as tightly as
+  the platform allows: `--sandbox read-only` (no writes/network), an isolated
+  empty working directory, and no inherited environment. A determined injection
+  could still read absolute paths via a read-only command, so prefer
+  `claude-code` when the input is fully untrusted.
+
 Run `npm run test:cli` to build the packaged CLI entry point and execute the
 CLI regression suite.
 

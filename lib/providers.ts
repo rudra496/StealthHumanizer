@@ -1,7 +1,17 @@
 // Unified Provider Interface for all AI providers
 // StealthHumanizer v2 - Free AI Text Humanizer
+//
+// Browser-safe: this file is imported by client components (Settings.tsx)
+// because they need PROVIDERS metadata and call testApiKey() from the browser
+// (API keys go straight from the browser to the provider — no server proxy).
+// Therefore NO node: builtins or subprocess imports here. CLI-runner providers
+// (claude-code, codex) cannot execute through this file — call sites in
+// server-only contexts must use lib/server/providers-runtime instead, which
+// wraps this file's generateWithProvider and intercepts the CLI cases.
 
 import { ModelProvider, Provider } from './types';
+
+export type { ModelProvider, Provider };
 
 // ==================== FETCH WITH TIMEOUT + RETRY ====================
 
@@ -224,7 +234,42 @@ export const PROVIDERS: Provider[] = [
     ],
     placeholder: '...',
   },
+  {
+    id: 'claude-code',
+    name: 'Claude Code (CLI)',
+    description: 'Runs your local Claude Code CLI as a subprocess. Uses your existing Claude subscription — no API key required. CLI/Node only.',
+    free: true,
+    cliOnly: true,
+    apiUrl: '',
+    getApiKeyUrl: 'https://docs.claude.com/en/docs/claude-code/overview',
+    docsUrl: 'https://docs.claude.com/en/docs/claude-code/cli-reference',
+    // 'opus' / 'sonnet' / 'haiku' are aliases the claude CLI resolves to the
+    // latest version in each family (currently Opus 4.7, Sonnet 4.6, Haiku 4.5).
+    // Prefer aliases so this default stays correct as Anthropic ships new
+    // versions without requiring a registry bump.
+    defaultModel: 'opus',
+    models: ['opus', 'sonnet', 'haiku', 'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+    placeholder: '',
+  },
+  {
+    id: 'codex',
+    name: 'OpenAI Codex (CLI)',
+    description: 'Runs your local Codex CLI as a subprocess. Uses your existing OpenAI subscription — no API key required. CLI/Node only.',
+    free: true,
+    cliOnly: true,
+    apiUrl: '',
+    getApiKeyUrl: 'https://github.com/openai/codex',
+    docsUrl: 'https://github.com/openai/codex#readme',
+    defaultModel: 'gpt-5.5',
+    models: ['gpt-5.5', 'gpt-5-codex', 'gpt-5', 'o4-mini'],
+    placeholder: '',
+  },
 ];
+
+// Providers safe to surface in the browser UI. CLI-only runners are excluded:
+// they spawn a local subprocess on the server, so they must never be selectable
+// from the web client (the API routes also reject them — see isCliOnlyProvider).
+export const WEB_PROVIDERS: Provider[] = PROVIDERS.filter((p) => !p.cliOnly);
 
 // ==================== PROVIDER FUNCTIONS ====================
 
@@ -233,17 +278,23 @@ export function getProvider(id: ModelProvider): Provider | undefined {
 }
 
 export function getAvailableProvider(keys: Record<string, string | undefined>): ModelProvider | null {
-  // Priority order for free providers
+  // Priority order for free providers. CLI-only runners (claude-code, codex)
+  // are intentionally omitted — they require a local binary and explicit
+  // --model selection, so we never auto-select them.
   const priority: ModelProvider[] = [
     'gemini', 'groq', 'openrouter', 'together', 'cerebras', 'zai',
     'mistral', 'cohere', 'deepinfra', 'huggingface', 'cloudflare',
     'openai', 'claude'
   ];
-  
+
   for (const provider of priority) {
     if (keys[provider]) return provider;
   }
   return null;
+}
+
+export function isCliOnlyProvider(id: ModelProvider): boolean {
+  return getProvider(id)?.cliOnly === true;
 }
 
 export function getProviderDisplayName(provider: ModelProvider): string {
@@ -306,7 +357,7 @@ async function geminiGenerate(
   options: GenerationOptions = {}
 ): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-  
+
   const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -374,7 +425,7 @@ async function huggingfaceGenerate(
   options: GenerationOptions = {}
 ): Promise<string> {
   const url = `https://api-inference.huggingface.co/models/${model}`;
-  
+
   const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: {
@@ -431,11 +482,15 @@ async function claudeGenerate(
   }
 
   const data = await response.json();
-  const textBlock = data.content?.find((b: any) => b.type === 'text');
+  const textBlock = data.content?.find((b: { type?: string; text?: string }) => b.type === 'text');
   return textBlock?.text || '';
 }
 
 // ==================== MAIN GENERATION FUNCTION ====================
+
+const CLI_RUNTIME_REQUIRED_MESSAGE =
+  'CLI-runner providers (claude-code, codex) require the server runtime. ' +
+  'Import generateWithProvider from "@/lib/server/providers-runtime" in server-only code.';
 
 export async function generateWithProvider(
   provider: ModelProvider,
@@ -455,72 +510,77 @@ export async function generateWithProvider(
   switch (provider) {
     case 'gemini':
       return geminiGenerate(apiKey, systemPrompt, userPrompt, model, options);
-    
+
     case 'claude':
       return claudeGenerate(apiKey, systemPrompt, fullUserPrompt, model, options);
-    
+
     case 'cohere':
       return cohereGenerate(apiKey, systemPrompt, fullUserPrompt, model, options);
-    
+
     case 'huggingface':
       return huggingfaceGenerate(apiKey, systemPrompt, fullUserPrompt, model, options);
-    
+
     case 'openai':
       return openAICompatibleGenerate(
         'https://api.openai.com/v1/chat/completions',
         apiKey, systemPrompt, fullUserPrompt, model, options
       );
-    
+
     case 'groq':
       return openAICompatibleGenerate(
         'https://api.groq.com/openai/v1/chat/completions',
         apiKey, systemPrompt, fullUserPrompt, model, options
       );
-    
+
     case 'mistral':
       return openAICompatibleGenerate(
         'https://api.mistral.ai/v1/chat/completions',
         apiKey, systemPrompt, fullUserPrompt, model, options
       );
-    
+
     case 'together':
       return openAICompatibleGenerate(
         'https://api.together.xyz/v1/chat/completions',
         apiKey, systemPrompt, fullUserPrompt, model, options
       );
-    
+
     case 'openrouter':
       return openAICompatibleGenerate(
         'https://openrouter.ai/api/v1/chat/completions',
         apiKey, systemPrompt, fullUserPrompt, model, options
       );
-    
+
     case 'cerebras':
       return openAICompatibleGenerate(
         'https://api.cerebras.ai/v1/chat/completions',
         apiKey, systemPrompt, fullUserPrompt, model, options
       );
-    
+
     case 'deepinfra':
       return openAICompatibleGenerate(
         'https://api.deepinfra.com/v1/openai/chat/completions',
         apiKey, systemPrompt, fullUserPrompt, model, options
       );
-    
-    case 'cloudflare':
+
+    case 'cloudflare': {
       const accountId = apiKey.split(':')[0];
       const apiToken = apiKey.split(':')[1] || apiKey;
       return openAICompatibleGenerate(
         `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`,
         apiToken, systemPrompt, fullUserPrompt, model, options
       );
-    
+    }
+
     case 'zai':
       return openAICompatibleGenerate(
         'https://api.z.ai/api/paas/v4/chat/completions',
         apiKey, systemPrompt, fullUserPrompt, model, options
       );
-    
+
+    case 'claude-code':
+    case 'codex':
+      throw new Error(CLI_RUNTIME_REQUIRED_MESSAGE);
+
     default:
       throw new Error(`Provider ${provider} not implemented`);
   }
@@ -546,7 +606,7 @@ Provide ${count} DIFFERENT alternative humanizations of the original sentence. M
 Return ONLY the ${count} alternative sentences, one per line. No numbering, no explanations.`;
 
   const result = await generateWithProvider(provider, apiKey, altPrompt, '', { temperature: 1.0, maxTokens: 1024 });
-  
+
   return result
     .split('\n')
     .map(line => line.replace(/^[\d\-\*\.]+\s*/, '').trim())
@@ -557,16 +617,13 @@ Return ONLY the ${count} alternative sentences, one per line. No numbering, no e
 // ==================== TEST API KEY ====================
 
 export async function testApiKey(provider: ModelProvider, apiKey: string): Promise<boolean> {
-  if (!apiKey || !apiKey.trim()) {
-    return false;
-  }
-  
+  // CLI-runner providers don't have API keys to test from the browser. The
+  // server-side equivalent is testCliProvider() in lib/server/providers-runtime.
+  if (isCliOnlyProvider(provider)) return false;
   try {
-    await generateWithProvider(provider, apiKey.trim(), 'You are a test assistant.', 'Say "ok" and nothing else.', { maxTokens: 10 });
+    await generateWithProvider(provider, apiKey, 'You are a test assistant.', 'Say "ok" and nothing else.', { maxTokens: 10 });
     return true;
-  } catch (error) {
-    // Log error for debugging but return false for invalid key
-    console.error(`API key test failed for ${provider}:`, error);
+  } catch {
     return false;
   }
 }

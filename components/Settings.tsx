@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Key, Eye, EyeOff, ExternalLink, Shield, Check, X, Zap, Star, RotateCcw } from 'lucide-react';
-import { PROVIDERS, getProvider, testApiKey } from '@/lib/providers';
+import { WEB_PROVIDERS as PROVIDERS, getProvider, testApiKey } from '@/lib/providers';
 import { getApiKeys, setApiKeys, clearApiKeys } from '@/lib/storage';
 import { ModelProvider } from '@/lib/types';
 

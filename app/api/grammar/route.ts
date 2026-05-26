@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ModelProvider } from '@/lib/types';
-import { generateWithProvider, getProvider } from '@/lib/providers';
+import { getProvider, isCliOnlyProvider } from '@/lib/providers';
+import { generateWithProvider } from '@/lib/server/providers-runtime';
 import { GRAMMAR_CHECK_SYSTEM_PROMPT } from '@/lib/prompts';
 
 export async function POST(request: NextRequest) {
   try {
     const { text, model, apiKey } = await request.json();
     if (!text || !model || !apiKey) return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    if (isCliOnlyProvider(model)) return NextResponse.json({ success: false, error: `Provider "${model}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
 
     const providerInfo = getProvider(model);
     const modelId = providerInfo?.defaultModel || model;

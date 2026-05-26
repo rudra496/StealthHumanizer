@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { detectAI } from '@/lib/detector';
 import { postprocess } from '@/lib/postprocess';
 import { getSystemPrompt, LEVEL_PARAMS } from '@/lib/prompts';
-import { generateWithProvider } from '@/lib/providers';
+import { generateWithProvider } from '@/lib/server/providers-runtime';
+import { isCliOnlyProvider } from '@/lib/providers';
 import { RewriteLevel } from '@/lib/types';
 import { asyncMapConcurrent } from '@/lib/batch';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -27,6 +28,9 @@ export async function POST(request: NextRequest) {
 
     if (!model || !apiKey) {
       return NextResponse.json({ success: false, error: 'Missing required fields: model and apiKey' }, { status: 400 });
+    }
+    if (isCliOnlyProvider(model)) {
+      return NextResponse.json({ success: false, error: `Provider "${model}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
     }
 
     if (!Array.isArray(texts) || texts.length === 0) {
