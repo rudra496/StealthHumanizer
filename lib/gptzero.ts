@@ -1,15 +1,36 @@
+import { detectAI } from './detector';
+
 const GPTZERO_API_URL = 'https://api.gptzero.me/v2/predict/text';
 
 export interface GPTZeroResult {
+  /** AI probability from 0 to 1 when source is GPTZero or local fallback. */
   score: number | null;
   verdict: string | null;
   sentences: unknown[];
+  source: 'gptzero' | 'local-fallback';
+  message?: string;
+}
+
+function localFallback(text: string, message: string): GPTZeroResult {
+  const local = detectAI(text);
+  return {
+    score: Math.max(0, Math.min(1, (100 - local.score) / 100)),
+    verdict: local.overallVerdict === 'ai' ? 'generated' : local.overallVerdict,
+    sentences: local.sentences.map(sentence => ({
+      text: sentence.text,
+      generated_prob: Math.max(0, Math.min(1, (100 - sentence.score) / 100)),
+      classification: sentence.classification,
+      issues: sentence.issues,
+    })),
+    source: 'local-fallback',
+    message,
+  };
 }
 
 export async function detectWithGPTZero(text: string): Promise<GPTZeroResult> {
-  const apiKey = process.env.GPTZERO_API_KEY;
+  const apiKey = process.env.GPTZERO_API_KEY?.trim();
   if (!apiKey) {
-    throw new Error('GPTZero API key is not configured. Set GPTZERO_API_KEY in your environment.');
+    return localFallback(text, 'GPTZero API key is not configured. Using the local detector fallback instead.');
   }
 
   let lastError: Error | null = null;
@@ -47,16 +68,18 @@ export async function detectWithGPTZero(text: string): Promise<GPTZeroResult> {
         score: doc.completely_generated_prob ?? doc.average_generated_prob ?? null,
         verdict: doc.predicted_class ?? null,
         sentences: doc.sentences ?? [],
+        source: 'gptzero',
       };
     } catch (err: unknown) {
       clearTimeout(timeout);
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error('GPTZero API request timed out (15s)');
+        lastError = new Error('GPTZero API request timed out (15s)');
+      } else {
+        lastError = err instanceof Error ? err : new Error('Unknown error');
       }
-      lastError = err instanceof Error ? err : new Error('Unknown error');
       if (attempt < maxRetries) continue;
     }
   }
 
-  throw lastError || new Error('GPTZero detection failed');
+  return localFallback(text, lastError?.message ? `GPTZero request failed; using local fallback. ${lastError.message}` : 'GPTZero request failed; using local fallback.');
 }

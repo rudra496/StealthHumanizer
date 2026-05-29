@@ -2,34 +2,54 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getProvider, isCliOnlyProvider } from '@/lib/providers';
 import { generateWithProvider } from '@/lib/server/providers-runtime';
 import { GRAMMAR_CHECK_SYSTEM_PROMPT } from '@/lib/prompts';
+import { checkGrammarLocally, normalizeGrammarPayload, parseFirstJsonObject } from '@/lib/grammar';
+import { ModelProvider } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   try {
     const { text, model, apiKey } = await request.json();
-    if (!text || !model || !apiKey) return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
-    if (isCliOnlyProvider(model)) return NextResponse.json({ success: false, error: `Provider "${model}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return NextResponse.json({ success: false, error: 'text is required' }, { status: 400 });
+    }
+    if (text.length > 50000) {
+      return NextResponse.json({ success: false, error: 'Text exceeds 50,000 character limit' }, { status: 400 });
+    }
 
-    const providerInfo = getProvider(model);
-    const modelId = providerInfo?.defaultModel || model;
+    if (!model || !apiKey) {
+      const local = checkGrammarLocally(text);
+      return NextResponse.json({ success: true, ...local, warning: 'No model/API key supplied; used the local grammar fallback.' });
+    }
 
-    const result = await generateWithProvider(
-      model, apiKey,
-      GRAMMAR_CHECK_SYSTEM_PROMPT,
-      text,
-      { temperature: 0.2, maxTokens: 2048, model: modelId }
-    );
+    if (isCliOnlyProvider(model as ModelProvider)) {
+      return NextResponse.json({ success: false, error: `Provider "${model}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
+    }
 
-    const jsonMatch = result.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return NextResponse.json({ success: true,
-        issues: parsed.issues || [],
-        correctedText: parsed.correctedText || text,
+    try {
+      const providerInfo = getProvider(model as ModelProvider);
+      const modelId = providerInfo?.defaultModel || model;
+      const result = await generateWithProvider(
+        model as ModelProvider,
+        apiKey,
+        GRAMMAR_CHECK_SYSTEM_PROMPT,
+        text,
+        { temperature: 0.1, maxTokens: 2048, model: modelId }
+      );
+
+      const parsed = normalizeGrammarPayload(parseFirstJsonObject(result), text, 'llm');
+      if (parsed) return NextResponse.json({ success: true, ...parsed });
+    } catch (err: unknown) {
+      const local = checkGrammarLocally(text);
+      return NextResponse.json({
+        success: true,
+        ...local,
+        warning: err instanceof Error ? `LLM grammar check failed; used local fallback. ${err.message}` : 'LLM grammar check failed; used local fallback.',
       });
     }
 
-    return NextResponse.json({ success: false, error: 'Failed to parse grammar check results' }, { status: 500 });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message || 'Internal error' }, { status: 500 });
+    const local = checkGrammarLocally(text);
+    return NextResponse.json({ success: true, ...local, warning: 'Could not parse LLM grammar JSON; used local fallback.' });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal error';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

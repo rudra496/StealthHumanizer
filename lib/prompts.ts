@@ -354,7 +354,17 @@ export function getRehumanizePrompt(
   customTone?: string,
   purpose?: TextPurpose
 ): string {
+  const toneNote = tone === 'custom' && customTone
+    ? `Tone: ${customTone}`
+    : `Tone: ${TONE_CONFIGS[tone]?.name || tone}`;
+  const purposeNote = purpose && PURPOSE_CONFIGS[purpose]?.promptOverlay
+    ? PURPOSE_CONFIGS[purpose].promptOverlay
+    : 'Purpose: preserve the original use case and meaning.';
+
   return `These sentences were flagged as AI-generated. Rewrite each one to sound completely human.
+
+${toneNote}
+${purposeNote}
 
 RULES FOR EACH SENTENCE:
 - Change the sentence structure completely (don't just swap words)
@@ -370,7 +380,8 @@ RULES FOR EACH SENTENCE:
 SENTENCES TO REWRITE:
 ${flaggedSentences.map((s, i) => `${i + 1}. ${s}`).join('\n')}
 
-Return ONLY the rewritten sentences, numbered, with no other text.`;
+Return ONLY a JSON array of strings in the same order, with one rewritten sentence per input sentence. Do not include markdown or explanations.
+Example: ["Honestly, this now sounds more like something a person would actually write.", "Look, the point still holds, but the rhythm feels less canned."]`;
 }
 
 // ==================== ENHANCEMENT PROMPTS ====================

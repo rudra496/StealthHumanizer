@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Copy, Download, FileText, RefreshCw, Zap, Eye,
   FileDown, Target, ChevronDown, ChevronUp, Keyboard, ArrowRight,
@@ -8,8 +8,8 @@ import {
   X, FileUp, BarChart2, Shield
 } from 'lucide-react';
 import { RewriteLevel, StylePreset, TonePreset, TextPurpose, HumanizationResult, ModelProvider } from '@/lib/types';
-import { TONE_CONFIGS, SAMPLE_AI_TEXT, SAMPLE_TECHNICAL_TEXT, PURPOSE_CONFIGS } from '@/lib/prompts';
-import { detectAI, getScoreColor, getScoreBarColor } from '@/lib/detector';
+import { SAMPLE_AI_TEXT, SAMPLE_TECHNICAL_TEXT } from '@/lib/prompts';
+import { detectAI, getScoreColor } from '@/lib/detector';
 import { getReadabilityLabel } from '@/lib/readability';
 import { countWords, downloadAsTxt, downloadAsDocx, downloadAsMarkdown, getApiKeys } from '@/lib/storage';
 import { WEB_PROVIDERS as PROVIDERS } from '@/lib/providers';
@@ -145,6 +145,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   const [gptzeroHumanized, setGptzeroHumanized] = useState<number | null>(null);
   const [gptzeroLoading, setGptzeroLoading] = useState(false);
   const [gptzeroUnavailable, setGptzeroUnavailable] = useState(false);
+  const [gptzeroSource, setGptzeroSource] = useState<'gptzero' | 'local-fallback' | null>(null);
 
   // Comparison chart visibility (Phase 4)
   const [showComparisonChart, setShowComparisonChart] = useState(false);
@@ -193,7 +194,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     return { providerId, apiKey };
   };
 
-  const handleHumanize = useCallback(async () => {
+  async function handleHumanize() {
     if (!inputText.trim()) { showToast('warning', 'Please enter some text to humanize.'); return; }
     if (wordCount > 10000) { showToast('warning', 'Maximum 10,000 words per input.'); return; }
     const { providerId, apiKey } = getApiCredentials();
@@ -252,9 +253,9 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
       setLoading(false);
       setProgress({ pass: 0, max: 0, message: '' });
     }
-  }, [inputText, level, style, tone, customTone, language, targetScore, showToast, wordCount, preferredModel, writingSample, purpose, enablePostprocess, enableChain, selectedChainModels, maxOutputWords]);
+  }
 
-  const handleCopy = () => { if (result) { navigator.clipboard.writeText(result.fullText); showToast('success', 'Copied!'); } };
+  function handleCopy() { if (result) { navigator.clipboard.writeText(result.fullText); showToast('success', 'Copied!'); } }
   const handleDownload = (format: 'txt' | 'docx' | 'md') => {
     if (result) {
       if (format === 'txt') downloadAsTxt(result.fullText, 'humanized');
@@ -320,7 +321,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   };
 
   // Auto-continue rehumanization until 100% (called after initial humanize)
-  const autoRehumanize = async (initialResult: any) => {
+  async function autoRehumanize(initialResult: HumanizationResult) {
     const { providerId, apiKey } = getApiCredentials();
     if (!apiKey) return;
 
@@ -345,7 +346,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             flaggedSentences: flagged, level: 'ninja', style, tone, customTone,
-            model: providerId, apiKey, fullText: currentFullText,
+            model: providerId, apiKey, fullText: currentFullText, purpose,
           }),
         });
         if (!resp.ok) break;
@@ -354,11 +355,14 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         const newDetection = detectAI(candidateText);
         const newScore = newDetection.score;
 
-        if (newScore >= currentScore) {
+        const changed = candidateText.trim() !== currentFullText.trim();
+        if (newScore > currentScore || (newScore === currentScore && changed && data.fallbackUsed)) {
           currentFullText = candidateText;
           currentScore = newScore;
         } else {
-          showToast('warning', `Stopped auto-refine: round ${round} would reduce score (${currentScore}% → ${newScore}%).`);
+          showToast('warning', changed
+            ? `Stopped auto-refine: round ${round} did not improve the score (${currentScore}% → ${newScore}%).`
+            : `Stopped auto-refine: round ${round} returned no usable changes.`);
           break;
         }
       }
@@ -399,7 +403,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
       setLoading(false);
       setProgress({ pass: 0, max: 0, message: '' });
     }
-  };
+  }
 
   // Re-humanize flagged sentences (manual trigger)
   const handleRehumanize = async () => {
@@ -427,7 +431,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             flaggedSentences: flagged, level: 'ninja', style, tone, customTone,
-            model: providerId, apiKey, fullText: currentFullText,
+            model: providerId, apiKey, fullText: currentFullText, purpose,
           }),
         });
         if (!resp.ok) break;
@@ -436,11 +440,14 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         const candidateText = data.fullText;
         const newDetection = detectAI(candidateText);
         const newScore = newDetection.score;
-        if (newScore >= currentScore) {
+        const changed = candidateText.trim() !== currentFullText.trim();
+        if (newScore > currentScore || (newScore === currentScore && changed && data.fallbackUsed)) {
           currentFullText = candidateText;
           currentScore = newScore;
         } else {
-          showToast('warning', `Stopped: round ${round} would reduce score (${currentScore}% → ${newScore}%).`);
+          showToast('warning', changed
+            ? `Stopped: round ${round} did not improve the score (${currentScore}% → ${newScore}%).`
+            : `Stopped: round ${round} returned no usable changes.`);
           break;
         }
       }
@@ -491,7 +498,6 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   const handleGrammarCheck = async () => {
     if (!result) return;
     const { providerId, apiKey } = getApiCredentials();
-    if (!apiKey) { showToast('warning', 'No API key configured'); return; }
 
     setGrammarChecking(true);
     try {
@@ -499,14 +505,15 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: result.fullText, model: providerId, apiKey }),
       });
-      if (!resp.ok) throw new Error('Grammar check failed');
+      if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.error || 'Grammar check failed'); }
       const data = await resp.json();
       setGrammarIssues(data.issues || []);
       setCorrectedText(data.correctedText || result.fullText);
-      if (data.issues.length === 0) {
+      if (data.warning) showToast('warning', data.warning);
+      if ((data.issues || []).length === 0) {
         showToast('success', 'No grammar issues found! ✅');
       } else {
-        showToast('info', `Found ${data.issues.length} issue(s)`);
+        showToast('info', `Found ${(data.issues || []).length} issue(s)`);
       }
     } catch (err: any) {
       showToast('error', err.message);
@@ -544,19 +551,17 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     if (!result) return;
     setGptzeroLoading(true);
     setGptzeroUnavailable(false);
+    setGptzeroSource(null);
     try {
       const [origRes, humRes] = await Promise.all([
         fetch('/api/detect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: inputText }) }),
         fetch('/api/detect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: result.fullText }) }),
       ]);
 
-      if (origRes.status === 503 || humRes.status === 503) {
-        setGptzeroUnavailable(true);
-        showToast('warning', 'GPTZero API key not configured. Set GPTZERO_API_KEY to enable.');
-        return;
-      }
-
       const [origData, humData] = await Promise.all([origRes.json(), humRes.json()]);
+      if (!origRes.ok || !humRes.ok || !origData.success || !humData.success) {
+        throw new Error(origData.error || humData.error || 'Detection failed');
+      }
       // Handle both old and new response formats
       const origPayload = origData.data ?? origData;
       const humPayload = humData.data ?? humData;
@@ -564,7 +569,12 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
       const humScore = typeof humPayload.score === 'number' ? Math.round(humPayload.score * 100) : null;
       setGptzeroOriginal(origScore);
       setGptzeroHumanized(humScore);
-      showToast('success', 'GPTZero scores loaded!');
+      const source = origPayload.source === 'local-fallback' || humPayload.source === 'local-fallback' ? 'local-fallback' : 'gptzero';
+      setGptzeroSource(source);
+      setGptzeroUnavailable(source === 'local-fallback');
+      showToast(source === 'gptzero' ? 'success' : 'warning', source === 'gptzero'
+        ? 'GPTZero scores loaded!'
+        : 'GPTZero API key unavailable or failed; showing local detector fallback.');
     } catch {
       showToast('error', 'GPTZero detection failed.');
     } finally {
@@ -1268,28 +1278,27 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
       {result && (gptzeroOriginal !== null || gptzeroHumanized !== null || gptzeroUnavailable) && (
         <div className="bg-dark-800/50 border border-purple-500/30 rounded-xl p-4 animate-fade-in">
           <h3 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
-            <Shield className="w-4 h-4 text-purple-400" /> GPTZero Detection — Before vs After
+            <Shield className="w-4 h-4 text-purple-400" /> {gptzeroSource === 'local-fallback' ? 'Local Detection Fallback' : 'GPTZero Detection'} — Before vs After
           </h3>
-          {gptzeroUnavailable ? (
-            <p className="text-sm text-yellow-400">⚠️ GPTZero API key not configured. Set <code className="bg-dark-700 px-1 rounded text-xs">GPTZERO_API_KEY</code> in your environment to enable real detection scoring.</p>
-          ) : (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-dark-700/30 rounded-lg p-4 text-center">
-                <p className="text-xs text-dark-400 mb-1">Original (AI probability)</p>
-                <p className={`text-3xl font-bold ${gptzeroOriginal !== null && gptzeroOriginal > 50 ? 'text-red-400' : 'text-green-400'}`}>
-                  {gptzeroOriginal !== null ? `${gptzeroOriginal}%` : '—'}
-                </p>
-                <p className="text-xs text-dark-500 mt-1">Before humanization</p>
-              </div>
-              <div className="bg-dark-700/30 rounded-lg p-4 text-center">
-                <p className="text-xs text-dark-400 mb-1">Humanized (AI probability)</p>
-                <p className={`text-3xl font-bold ${gptzeroHumanized !== null && gptzeroHumanized > 50 ? 'text-red-400' : 'text-green-400'}`}>
-                  {gptzeroHumanized !== null ? `${gptzeroHumanized}%` : '—'}
-                </p>
-                <p className="text-xs text-dark-500 mt-1">After humanization</p>
-              </div>
-            </div>
+          {gptzeroUnavailable && (
+            <p className="text-sm text-yellow-400 mb-3">⚠️ Official GPTZero API scoring requires <code className="bg-dark-700 px-1 rounded text-xs">GPTZERO_API_KEY</code>. These numbers are from the local fallback detector, not GPTZero. <a href="https://gptzero.me/" target="_blank" rel="noreferrer" className="underline hover:text-yellow-300">Open GPTZero</a></p>
           )}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-dark-700/30 rounded-lg p-4 text-center">
+              <p className="text-xs text-dark-400 mb-1">Original (AI probability)</p>
+              <p className={`text-3xl font-bold ${gptzeroOriginal !== null && gptzeroOriginal > 50 ? 'text-red-400' : 'text-green-400'}`}>
+                {gptzeroOriginal !== null ? `${gptzeroOriginal}%` : '—'}
+              </p>
+              <p className="text-xs text-dark-500 mt-1">Before humanization</p>
+            </div>
+            <div className="bg-dark-700/30 rounded-lg p-4 text-center">
+              <p className="text-xs text-dark-400 mb-1">Humanized (AI probability)</p>
+              <p className={`text-3xl font-bold ${gptzeroHumanized !== null && gptzeroHumanized > 50 ? 'text-red-400' : 'text-green-400'}`}>
+                {gptzeroHumanized !== null ? `${gptzeroHumanized}%` : '—'}
+              </p>
+              <p className="text-xs text-dark-500 mt-1">After humanization</p>
+            </div>
+          </div>
         </div>
       )}
 
