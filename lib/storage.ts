@@ -179,6 +179,19 @@ export function downloadAsTxt(text: string, filename: string): void {
 }
 
 export function downloadAsDocx(text: string, filename: string): void {
+  // HTML-escape user content to prevent XSS
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  const safeFilename = escapeHtml(filename);
+  const safeText = escapeHtml(text);
+
   // Simple DOCX format (just wrapped text)
   const docContent = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office"
@@ -186,10 +199,10 @@ export function downloadAsDocx(text: string, filename: string): void {
           xmlns="http://www.w3.org/TR/REC-html40">
       <head>
         <meta charset="utf-8">
-        <title>${filename}</title>
+        <title>${safeFilename}</title>
       </head>
       <body>
-        ${text.split('\n').map(p => `<p>${p}</p>`).join('\n')}
+        ${safeText.split('\n').map(p => `<p>${p}</p>`).join('\n')}
       </body>
     </html>
   `;

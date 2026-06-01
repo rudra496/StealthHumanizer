@@ -565,6 +565,10 @@ export async function generateWithProvider(
     case 'cloudflare': {
       const accountId = apiKey.split(':')[0];
       const apiToken = apiKey.split(':')[1] || apiKey;
+      // Validate accountId format to prevent SSRF
+      if (!/^[a-f0-9]{32}$/i.test(accountId)) {
+        throw new Error('Invalid Cloudflare account ID format. Expected 32-character hexadecimal string.');
+      }
       return openAICompatibleGenerate(
         `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model}`,
         apiToken, systemPrompt, fullUserPrompt, model, options

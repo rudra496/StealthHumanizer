@@ -6,16 +6,46 @@ import { postprocess } from '@/lib/postprocess';
 import { detectAI } from '@/lib/detector';
 import { ModelProvider, StylePreset } from '@/lib/types';
 import { chooseImprovedRewrite, parseRehumanizedLines, replaceSentencesInText } from '@/lib/rehumanize';
+import { checkRateLimit } from '@/lib/rate-limit';
+
+const VALID_LEVELS = ['light', 'medium', 'aggressive', 'ninja'];
+const VALID_STYLES = ['academic', 'business', 'creative', 'casual', 'technical', 'humanize'];
+const VALID_TONES = ['neutral', 'formal', 'conversational', 'engaging'];
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    const rateLimit = checkRateLimit(ip, 15, 60_000); // stricter: 15 req/min for rehumanize
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Rate limit exceeded. Please try again later.' },
+        { status: 429 },
+      );
+    }
+
     const { flaggedSentences, level, style, tone, customTone, model, apiKey, fullText, purpose } = await request.json();
+
+    // Input validation
     if (!Array.isArray(flaggedSentences) || flaggedSentences.length === 0) {
       return NextResponse.json({ success: false, error: 'flaggedSentences is required' }, { status: 400 });
     }
     if (!model || !apiKey) {
       return NextResponse.json({ success: false, error: 'model and apiKey are required for re-humanization' }, { status: 400 });
     }
+    if (fullText && typeof fullText === 'string' && fullText.length > 50000) {
+      return NextResponse.json({ success: false, error: 'fullText exceeds 50,000 character limit' }, { status: 400 });
+    }
+    if (level && !VALID_LEVELS.includes(level)) {
+      return NextResponse.json({ success: false, error: `Invalid level. Must be one of: ${VALID_LEVELS.join(', ')}` }, { status: 400 });
+    }
+    if (style && !VALID_STYLES.includes(style)) {
+      return NextResponse.json({ success: false, error: `Invalid style. Must be one of: ${VALID_STYLES.join(', ')}` }, { status: 400 });
+    }
+    if (tone && !VALID_TONES.includes(tone)) {
+      return NextResponse.json({ success: false, error: `Invalid tone. Must be one of: ${VALID_TONES.join(', ')}` }, { status: 400 });
+    }
+
     if (isCliOnlyProvider(model as ModelProvider)) {
       return NextResponse.json({ success: false, error: `Provider "${model}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
     }

@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+// Magic byte signatures
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2D]; // %PDF-
+const ZIP_MAGIC = [0x50, 0x4B, 0x03, 0x04]; // PK (DOCX is a ZIP)
+
+function validateMagicBytes(uint8: Uint8Array, ext: string): boolean {
+  if (uint8.length < 5) return false;
+
+  if (ext === 'pdf') {
+    return PDF_MAGIC.every((byte, i) => uint8[i] === byte);
+  }
+
+  if (ext === 'docx') {
+    return ZIP_MAGIC.every((byte, i) => uint8[i] === byte);
+  }
+
+  return true; // txt files don't need magic byte validation
+}
 
 async function extractPdfText(uint8: Uint8Array): Promise<string> {
   const candidates = [
@@ -40,6 +59,16 @@ async function extractPdfText(uint8: Uint8Array): Promise<string> {
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    const rateLimit = checkRateLimit(ip);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Rate limit exceeded. Please try again later.' },
+        { status: 429 },
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
     
@@ -62,8 +91,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (ext === 'docx') {
-      const mammoth = await import('mammoth');
       const arrayBuffer = await file.arrayBuffer();
+      const uint8 = new Uint8Array(arrayBuffer);
+
+      // Validate magic bytes (DOCX is a ZIP archive)
+      if (!validateMagicBytes(uint8, 'docx')) {
+        return NextResponse.json({ success: false, error: 'File does not appear to be a valid DOCX file.' }, { status: 400 });
+      }
+
+      const mammoth = await import('mammoth');
       const buffer = Buffer.from(arrayBuffer);
       const result = await mammoth.extractRawText({ buffer });
       if (!result.value.trim()) return NextResponse.json({ success: false, error: 'Document contains no text content.' }, { status: 400 });
@@ -73,6 +109,12 @@ export async function POST(request: NextRequest) {
     if (ext === 'pdf') {
       const arrayBuffer = await file.arrayBuffer();
       const uint8 = new Uint8Array(arrayBuffer);
+
+      // Validate magic bytes (PDF starts with %PDF-)
+      if (!validateMagicBytes(uint8, 'pdf')) {
+        return NextResponse.json({ success: false, error: 'File does not appear to be a valid PDF file.' }, { status: 400 });
+      }
+
       const fullText = await extractPdfText(uint8);
 
       if (!fullText.trim()) {
@@ -86,11 +128,11 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: `Unsupported file type: .${ext}. Supported: .txt, .docx, .pdf` },
+      { success: false, error: `Unsupported file type: .${ext}. Supported: .txt, .docx, .pdf` },
       { status: 400 }
     );
-  } catch (err: any) {
-    const msg = err?.message || 'Failed to parse file';
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Failed to parse file';
     return NextResponse.json({ success: false, error: msg }, { status: 500 });
   }
 }

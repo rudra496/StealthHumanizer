@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { detectWithGPTZero } from '@/lib/gptzero';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    const rateLimit = checkRateLimit(ip);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Rate limit exceeded. Please try again later.' },
+        { status: 429 },
+      );
+    }
+
     const { text } = await request.json();
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
