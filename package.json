@@ -42,6 +42,10 @@
     "pipeline:q1-ready:skip-install": "node scripts/papers/complete-ready-pipeline.mjs --skip-install"
   },
   "dependencies": {
+    "ai": "^4.0.0",
+    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/google": "^1.0.0",
     "dotenv": "^17.4.2",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.17.0",
