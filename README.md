@@ -408,3 +408,14 @@ QuillBot alternative, Undetectable.ai alternative, StealthWriter alternative, Hi
 **[⭐ Star this repo](../../stargazers) · [🍴 Fork it](../../fork) · [👤 Follow @rudra496](https://github.com/rudra496)**
 
 </div>
+
+## Implemented roadmap capabilities
+
+- **Real-time streaming endpoint:** `POST /api/humanize/stream` returns Server-Sent Events with `progress`, `result`, `error`, and `done` events so web or API clients can show live pipeline status.
+- **Semantic fidelity validation:** every humanization result now includes a BERTScore-inspired semantic report with keyword recall, length alignment, sentence alignment, warnings, and a preserved/review/drift verdict.
+- **Client-side Privacy Mode:** the Humanizer UI can run a local deterministic rewrite with no provider API key and no network model call, useful for sensitive drafts or offline local-model workflows.
+- **Observability & cost dashboard:** the Dashboard tab tracks run count, estimated cost, latency, human score, semantic score, and recent run history in browser storage.
+- **API service layer:** `POST /api/v1/humanize` supports programmatic use with optional `STEALTHHUMANIZER_API_TOKEN` service authentication and provider-key environment fallback.
+- **Browser extension starter:** `extension/` contains a Manifest V3 Chrome/Firefox-compatible companion that sends selected page text to a local or hosted StealthHumanizer instance.
+- **Detector benchmarking dashboard:** the Dashboard tab includes a built-in benchmark runner that compares detector scores before and after the offline privacy rewrite.
+- **Screenshot without Playwright download:** use `npm run screenshot -- http://localhost:3000 /tmp/stealthhumanizer-dashboard.png` after starting the dev server; it uses an installed Chrome/Chromium binary and avoids registry downloads.

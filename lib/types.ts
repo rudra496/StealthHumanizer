@@ -67,6 +67,7 @@ export interface HumanizationOptions {
   model: ModelProvider;
   targetScore?: number;
   language: string;
+  purpose?: TextPurpose;
   /** Academic domain for corpus-calibrated style matching */
   domain?: string;
   /** Enable aggressive context-blind synonym swap pass. Default: true.
@@ -112,7 +113,26 @@ export interface HumanizationResult {
     policyVersion: string;
     modelSelection: string;
   };
+  semanticFidelity?: {
+    score: number;
+    verdict: 'preserved' | 'review' | 'drift';
+    lexicalOverlap: number;
+    keywordRecall: number;
+    lengthRatio: number;
+    sentenceAlignment: number;
+    entityRecall: number;
+    numberRecall: number;
+    negationConsistency: number;
+    warnings: string[];
+  };
+  observability?: {
+    latencyMs: number;
+    estimatedCostUsd: number;
+    streamingAvailable: boolean;
+    privacyMode: boolean;
+  };
 }
+
 
 // ==================== DETECTION TYPES ====================
 
@@ -217,7 +237,7 @@ export interface Toast {
   message: string;
 }
 
-export type Tab = 'humanizer' | 'batch' | 'detector' | 'enhance' | 'history' | 'settings';
+export type Tab = 'humanizer' | 'batch' | 'detector' | 'dashboard' | 'enhance' | 'history' | 'settings';
 
 export type TextPurpose =
   | 'essay' | 'article' | 'blog' | 'email'

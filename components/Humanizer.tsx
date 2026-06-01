@@ -13,6 +13,12 @@ import { detectAI, getScoreColor } from '@/lib/detector';
 import { getReadabilityLabel } from '@/lib/readability';
 import { countWords, downloadAsTxt, downloadAsDocx, downloadAsMarkdown, getApiKeys } from '@/lib/storage';
 import { WEB_PROVIDERS as PROVIDERS } from '@/lib/providers';
+import { assessSemanticFidelity } from '@/lib/semantic-fidelity';
+import { localHumanizeText } from '@/lib/local-humanizer';
+import { addCostEntry } from '@/lib/cost-tracker';
+import { addObservabilityEvent, estimateRunCost } from '@/lib/observability';
+import { saveHumanizationVersion } from '@/lib/version-history';
+import { consumeHumanizeStream } from '@/lib/streaming-client';
 import dynamic from 'next/dynamic';
 
 const ComparisonChart = dynamic(
@@ -156,10 +162,16 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   // Heatmap mode
   const [showHeatmap, setShowHeatmap] = useState(false);
 
+  // Roadmap features
+  const [privacyMode, setPrivacyMode] = useState(false);
+  const [streamingMode, setStreamingMode] = useState(false);
+
   const wordCount = countWords(inputText);
   const hasAnyApiKey = Object.values(getApiKeys()).some(v => v && v.trim().length > 0);
 
   useEffect(() => {
+    const queryText = new URLSearchParams(window.location.search).get('text');
+    if (queryText) { setInputText(queryText); window.history.replaceState({}, '', window.location.pathname); return; }
     const reuse = sessionStorage.getItem('stealthhumanizer_reuse_text');
     if (reuse) { setInputText(reuse); sessionStorage.removeItem('stealthhumanizer_reuse_text'); }
   }, []);
@@ -194,11 +206,65 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     return { providerId, apiKey };
   };
 
+  function buildLocalPrivacyResult(startedAt: number): HumanizationResult {
+    const fullText = localHumanizeText(inputText, { level, style, tone });
+    const detection = detectAI(fullText);
+    const origSentences = inputText.match(/[^.!?]+[.!?]+[\s]*/g)?.map(s => s.trim()).filter(Boolean) || [inputText.trim()];
+    const newSentences = fullText.match(/[^.!?]+[.!?]+[\s]*/g)?.map(s => s.trim()).filter(Boolean) || [fullText.trim()];
+    const maxLen = Math.max(origSentences.length, newSentences.length);
+    const sentences = Array.from({ length: maxLen }, (_, index) => ({
+      original: origSentences[index] || '',
+      humanized: newSentences[index] || '',
+      alternatives: [],
+      index,
+      detectionScore: detection.sentences[index]?.score,
+    }));
+    return {
+      sentences,
+      fullText,
+      model: 'ollama',
+      modelName: 'Local Privacy Mode',
+      wordCount: { input: countWords(inputText), output: countWords(fullText) },
+      timestamp: Date.now(),
+      passes: 1,
+      finalScore: detection.score,
+      options: { level, style, tone, customTone, language, purpose, model: 'ollama' },
+      semanticFidelity: assessSemanticFidelity(inputText, fullText),
+      observability: { latencyMs: Math.round(performance.now() - startedAt), estimatedCostUsd: 0, streamingAvailable: false, privacyMode: true },
+    };
+  }
+
   async function handleHumanize() {
     if (!inputText.trim()) { showToast('warning', 'Please enter some text to humanize.'); return; }
     if (wordCount > 10000) { showToast('warning', 'Maximum 10,000 words per input.'); return; }
+    const startedAt = performance.now();
+
+    if (privacyMode) {
+      setLoading(true);
+      setResult(null);
+      setPipelineStep('Privacy mode: local rewrite...');
+      try {
+        const localResult = buildLocalPrivacyResult(startedAt);
+        setResult(localResult);
+        saveHumanizationVersion(localResult);
+        addObservabilityEvent({
+          type: 'privacy', provider: 'local-privacy', inputWords: localResult.wordCount.input,
+          outputWords: localResult.wordCount.output, latencyMs: localResult.observability?.latencyMs ?? 0,
+          costUsd: 0, finalScore: localResult.finalScore, semanticScore: localResult.semanticFidelity?.score, success: true,
+        });
+        showToast('success', `Privacy mode complete — ${localResult.finalScore}% human, ${localResult.semanticFidelity?.score}% semantic fidelity.`);
+      } catch (err: unknown) {
+        showToast('error', err instanceof Error ? err.message : 'Privacy mode failed');
+      } finally {
+        setLoading(false);
+        setPipelineStep('');
+        setProgress({ pass: 0, max: 0, message: '' });
+      }
+      return;
+    }
+
     const { providerId, apiKey } = getApiCredentials();
-    if (!apiKey) { showToast('warning', 'Please add an API key in Settings first. Gemini is free!'); return; }
+    if (!apiKey) { showToast('warning', 'Please add an API key in Settings first, or enable Privacy Mode for an offline local rewrite.'); return; }
 
     setLoading(true);
     setResult(null);
@@ -213,7 +279,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         Object.entries(getApiKeys()).map(([provider, key]) => [provider, key?.trim()])
       );
 
-      const response = await fetch('/api/humanize', {
+      const response = await fetch(streamingMode ? '/api/humanize/stream' : '/api/humanize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -225,9 +291,22 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           apiKeys: allApiKeys,
         }),
       });
-      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed'); }
-      const data = await response.json();
+      if (!response.ok) { const err = await response.json().catch(() => ({})); throw new Error(err.error || 'Failed'); }
+      let data: HumanizationResult & { success?: boolean };
+      if (streamingMode) {
+        data = await consumeHumanizeStream(response, event => {
+          if (event.type === 'progress') {
+            setPipelineStep(event.data.message || event.data.step || 'Streaming...');
+            if (event.data.chunk && event.data.totalChunks) {
+              setProgress({ pass: event.data.chunk, max: event.data.totalChunks, message: event.data.message || 'Streaming rewrite' });
+            }
+          }
+        });
+      } else {
+        data = await response.json();
+      }
       setResult(data);
+      saveHumanizationVersion(data);
       setPipelineStep('');
       setProgress({ pass: 1, max: 1, message: 'Done!' });
 
@@ -236,6 +315,14 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
       const confMsg = typeof conf === 'number' ? ` | Confidence: ${conf}%` : '';
       showToast('success', `Done with ${data.modelName} (${data.passes} pass${data.passes > 1 ? 'es' : ''}) — ${scoreMsg}`);
       if (confMsg) showToast('info', `Detector confidence${confMsg}`);
+      const observedLatency = Math.round(performance.now() - startedAt);
+      const observedCost = data.observability?.estimatedCostUsd ?? estimateRunCost(data.wordCount.input, data.wordCount.output, providerId);
+      addCostEntry({ date: new Date().toISOString().slice(0, 10), provider: providerId, model: data.modelName, tokens: Math.ceil((data.wordCount.input + data.wordCount.output) * 1.35), costUsd: observedCost });
+      addObservabilityEvent({
+        type: streamingMode ? 'stream' : 'humanize', provider: providerId, model: data.modelName,
+        inputWords: data.wordCount.input, outputWords: data.wordCount.output, latencyMs: observedLatency,
+        costUsd: observedCost, finalScore: data.finalScore, semanticScore: data.semanticFidelity?.score, success: true,
+      });
 
       // Auto-continue: if score < 100%, start rehumanize loop automatically
       if (data.finalScore < 90) {
@@ -379,12 +466,15 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         });
       }
 
-      setResult({
+      const refinedResult = {
         ...initialResult, sentences, fullText: currentFullText,
         passes: initialResult.passes + round,
         finalScore: finalDetection.score,
+        semanticFidelity: assessSemanticFidelity(inputText, currentFullText),
         wordCount: { ...initialResult.wordCount, output: countWords(currentFullText) },
-      });
+      };
+      setResult(refinedResult);
+      saveHumanizationVersion(refinedResult);
       setPipelineStep('');
 
       navigator.clipboard.writeText(currentFullText).catch(() => {});
@@ -466,14 +556,17 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         });
       }
 
-      setResult({
+      const refinedResult = {
         ...result,
         sentences,
         fullText: currentFullText,
         passes: result.passes + round,
         finalScore: finalDetection.score,
+        semanticFidelity: assessSemanticFidelity(inputText, currentFullText),
         wordCount: { ...result.wordCount, output: countWords(currentFullText) },
-      });
+      };
+      setResult(refinedResult);
+      saveHumanizationVersion(refinedResult);
 
       navigator.clipboard.writeText(currentFullText).catch(() => {});
       if (finalDetection.score < 90) {
@@ -972,6 +1065,17 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
               className="w-full h-64 p-4 glass-card rounded-xl text-white placeholder-dark-500 resize-none focus:outline-none focus:ring-2 focus:ring-accent-500/50 transition-all text-sm leading-relaxed" />
           </div>
 
+          <div className="mt-3 grid md:grid-cols-2 gap-2">
+            <label className="flex items-center gap-2 rounded-lg bg-dark-800/50 border border-dark-700/50 px-3 py-2 text-xs text-dark-300">
+              <input type="checkbox" checked={privacyMode} onChange={e => setPrivacyMode(e.target.checked)} className="accent-accent-500" />
+              🔒 Privacy Mode (offline local rewrite, no API key)
+            </label>
+            <label className="flex items-center gap-2 rounded-lg bg-dark-800/50 border border-dark-700/50 px-3 py-2 text-xs text-dark-300">
+              <input type="checkbox" checked={streamingMode} onChange={e => setStreamingMode(e.target.checked)} disabled={privacyMode} className="accent-accent-500" />
+              🌊 Streaming API route
+            </label>
+          </div>
+
           <div className="mt-3">
             <button onClick={handleHumanize} disabled={loading || !inputText.trim()}
               className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-accent-500 to-accent-600 hover:from-accent-600 hover:to-accent-700 text-white font-medium transition-all shadow-lg shadow-accent-500/25 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -1058,6 +1162,15 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
                 <p className="text-xs text-dark-500 mt-2 text-center">
                   Confidence interval: {detection.confidenceInterval.lower}% — {detection.confidenceInterval.upper}%
                 </p>
+              )}
+              {result.semanticFidelity && (
+                <div className="mt-4 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-white">Semantic fidelity: <span className="text-blue-300">{result.semanticFidelity.score}%</span> ({result.semanticFidelity.verdict})</p>
+                    <p className="text-xs text-dark-300">Keywords {result.semanticFidelity.keywordRecall}% • Entities {result.semanticFidelity.entityRecall}% • Numbers {result.semanticFidelity.numberRecall}% • Negation {result.semanticFidelity.negationConsistency}%</p>
+                  </div>
+                  {result.semanticFidelity.warnings.length > 0 && <p className="text-xs text-yellow-300 mt-2">⚠ {result.semanticFidelity.warnings.join(' ')}</p>}
+                </div>
               )}
             </div>
 

@@ -19,6 +19,8 @@ import { asyncMapConcurrent } from '@/lib/batch';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { countWords, chunkText } from '@/lib/storage';
 import { splitIntoSentences } from '@/lib/text-utils';
+import { assessSemanticFidelity } from '@/lib/semantic-fidelity';
+import { estimateRunCost } from '@/lib/observability';
 
 const MAX_BATCH_SIZE = 20;
 
@@ -52,6 +54,8 @@ async function llmSelfCheck(
 
 export async function POST(request: NextRequest) {
   try {
+    const startedAt = Date.now();
+
     // Rate limiting
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
     const rateLimit = checkRateLimit(ip);
@@ -135,7 +139,8 @@ export async function POST(request: NextRequest) {
           const detection = detectAI(final);
           const confidenceReport = buildConfidenceReport(detection.score);
           const runtimeModelScore = await scoreHumanLikeness(final);
-          return { index: i, fullText: final, finalScore: detection.score, confidenceReport, runtimeModelScore };
+          const semanticFidelity = assessSemanticFidelity(batchInput, final);
+          return { index: i, fullText: final, finalScore: detection.score, confidenceReport, runtimeModelScore, semanticFidelity };
         },
         3,
       );
@@ -264,6 +269,7 @@ export async function POST(request: NextRequest) {
     const finalDetection = detectAI(finalText);
     const confidenceReport = buildConfidenceReport(finalDetection.score);
     const runtimeModelScore = await scoreHumanLikeness(finalText);
+    const semanticFidelity = assessSemanticFidelity(text, finalText);
     const origSentences = splitIntoSentences(text);
     const humanizedSentences = splitIntoSentences(finalText);
     const maxLen = Math.max(origSentences.length, humanizedSentences.length);
@@ -286,6 +292,13 @@ export async function POST(request: NextRequest) {
       options: { level, style, tone, language, purpose },
       confidenceReport,
       runtimeModelScore,
+      semanticFidelity,
+      observability: {
+        latencyMs: Date.now() - startedAt,
+        estimatedCostUsd: estimateRunCost(countWords(text), countWords(finalText), model),
+        streamingAvailable: true,
+        privacyMode: false,
+      },
       fallbackBehavior: {
         used: guard.usedFallback,
         reason: guard.reason,
@@ -305,6 +318,7 @@ export async function POST(request: NextRequest) {
       inputWords: countWords(text),
       outputWords: countWords(finalText),
       finalScore: finalDetection.score,
+      semanticScore: semanticFidelity.score,
       confidence: confidenceReport.confidence,
       fallbackUsed: guard.usedFallback,
       runtimeModelSource: runtimeModelScore.modelSource,
