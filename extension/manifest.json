@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "StealthHumanizer Companion",
+  "version": "0.1.0",
+  "description": "Send selected text to a local or hosted StealthHumanizer instance.",
+  "permissions": ["contextMenus", "storage", "activeTab", "scripting"],
+  "host_permissions": ["http://localhost:3000/*", "https://stealthhumanizer.vercel.app/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "StealthHumanizer" },
+  "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_idle" }]
+}

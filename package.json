@@ -39,7 +39,8 @@
     "papers:download-few": "node scripts/papers/download-few-open-source.mjs",
     "test:download-few": "node scripts/tests/download-few-smoke.mjs",
     "pipeline:q1-ready": "node scripts/papers/complete-ready-pipeline.mjs",
-    "pipeline:q1-ready:skip-install": "node scripts/papers/complete-ready-pipeline.mjs --skip-install"
+    "pipeline:q1-ready:skip-install": "node scripts/papers/complete-ready-pipeline.mjs --skip-install",
+    "test:roadmap": "tsx scripts/tests/roadmap-features.mjs"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

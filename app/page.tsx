@@ -9,6 +9,7 @@ import BatchHumanizer from '@/components/BatchHumanizer';
 import Detector from '@/components/Detector';
 import History from '@/components/History';
 import Settings from '@/components/Settings';
+import ObservabilityDashboard from '@/components/ObservabilityDashboard';
 import Toast from '@/components/Toast';
 import Footer from '@/components/Footer';
 import { Toast as ToastType, Tab } from '@/lib/types';
@@ -221,6 +222,7 @@ export default function Home() {
       {activeTab !== 'humanizer' && activeTab !== 'batch' && (
         <main className="container mx-auto px-4 py-6 max-w-7xl flex-1">
           {activeTab === 'detector' && <Detector showToast={showToast} />}
+          {activeTab === 'dashboard' && <ObservabilityDashboard showToast={showToast} />}
           {activeTab === 'history' && <History showToast={showToast} setActiveTab={setActiveTab} />}
           {activeTab === 'settings' && <Settings showToast={showToast} />}
         </main>
