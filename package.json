@@ -86,5 +86,10 @@
     "academic-writing",
     "nextjs",
     "open-source"
-  ]
+  ],
+  "overrides": {
+    "js-yaml": "^4.2.0",
+    "esbuild": "^0.28.1",
+    "postcss": "^8.5.15"
+  }
 }
