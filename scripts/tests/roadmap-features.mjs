@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assessSemanticFidelity } from '../../lib/semantic-fidelity.ts';
 import { localHumanizeText } from '../../lib/local-humanizer.ts';
+import { stripAILexicon } from '../../lib/postprocess.ts';
 import { estimateRunCost, getDailyObservability, getProviderBreakdown, summarizeObservability } from '../../lib/observability.ts';
 import { consumeHumanizeStream } from '../../lib/streaming-client.ts';
 
@@ -18,6 +19,15 @@ test('privacy local humanizer rewrites common AI phrases without network state',
   const rewritten = localHumanizeText('Furthermore, it is important to note that teams utilize robust systems.', { level: 'ninja', style: 'humanize', tone: 'conversational' });
   assert.match(rewritten, /also|notably|use|solid|In practice/i);
   assert.doesNotMatch(rewritten, /important to note/i);
+});
+
+test('AI lexicon strips common issue 91 framing phrases', () => {
+  const rewritten = stripAILexicon(
+    "It is worth noting that in today's digital landscape, in the realm of education, as we navigate new tools, teams adapt."
+  );
+  assert.doesNotMatch(rewritten, /worth noting|digital landscape|realm of|as we navigate/i);
+  assert.match(rewritten, /Today in education/i);
+  assert.match(rewritten, /as we handle new tools/i);
 });
 
 test('observability summarizes cost and quality metrics', () => {
@@ -44,9 +54,10 @@ test('semantic fidelity flags changed numbers and negation drift', () => {
 });
 
 test('observability exposes provider and daily breakdowns', () => {
+  const now = Date.now();
   const events = [
-    { id: '1', timestamp: Date.UTC(2026, 5, 1), type: 'humanize', provider: 'gemini', inputWords: 100, outputWords: 110, latencyMs: 250, costUsd: 0.001, finalScore: 80, semanticScore: 90, success: true },
-    { id: '2', timestamp: Date.UTC(2026, 5, 1), type: 'stream', provider: 'gemini', inputWords: 70, outputWords: 75, latencyMs: 300, costUsd: 0.001, finalScore: 78, semanticScore: 88, success: true },
+    { id: '1', timestamp: now, type: 'humanize', provider: 'gemini', inputWords: 100, outputWords: 110, latencyMs: 250, costUsd: 0.001, finalScore: 80, semanticScore: 90, success: true },
+    { id: '2', timestamp: now, type: 'stream', provider: 'gemini', inputWords: 70, outputWords: 75, latencyMs: 300, costUsd: 0.001, finalScore: 78, semanticScore: 88, success: true },
   ];
   assert.equal(getProviderBreakdown(events).at(0)?.provider, 'gemini');
   assert.equal(getDailyObservability(30, events).at(0)?.runs, 2);
