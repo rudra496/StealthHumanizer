@@ -35,7 +35,7 @@ jobs:
           publish_results: false
 
       - name: Upload Scorecard SARIF artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scorecard-sarif-${{ github.run_id }}
           path: results.sarif
