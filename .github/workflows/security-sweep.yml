@@ -1,0 +1,129 @@
+name: Security Sweep
+
+# The "always-on" security bot. Runs weekly + on-demand to:
+#   1. npm audit (prod + full) and emit a severity breakdown
+#   2. Generate a CycloneDX SBOM (prod + full) and upload as an artifact
+#   3. Open / update / close a tracking issue (#security-sweep) based on findings
+# Does not gate CI — it reports. Auto-fixes are owned by Dependabot + Autopilot.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays ~06:17 UTC (off-round minute)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+concurrency:
+  group: security-sweep
+  cancel-in-progress: false
+
+jobs:
+  audit-and-sbom:
+    if: github.repository_owner == 'rudra496'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        id: audit
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          # --json exits non-zero when vulns exist; treat as data, not failure
+          npm audit --omit=dev --json > audit-prod.json 2>/dev/null || true
+          npm audit --json > audit-full.json 2>/dev/null || true
+
+          hc=$(jq '[.vulnerabilities[]? | select(.severity=="critical" or .severity=="high")] | length' audit-prod.json 2>/dev/null || echo 0)
+          echo "high_critical=$hc" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## npm audit — ${{ github.run_id }}"
+            echo ""
+            echo "| Severity | Production | Total (incl. dev) |"
+            echo "|---|---:|---:|"
+            for s in critical high moderate low info; do
+              p=$(jq --arg s "$s" '[.vulnerabilities[]? | select(.severity==$s)] | length' audit-prod.json 2>/dev/null || echo 0)
+              f=$(jq --arg s "$s" '[.vulnerabilities[]? | select(.severity==$s)] | length' audit-full.json 2>/dev/null || echo 0)
+              echo "| $s | $p | $f |"
+            done
+          } > audit-summary.md
+          cat audit-summary.md
+
+      - name: Generate SBOM (CycloneDX)
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          npx --yes @cyclonedx/cyclonedx-npm --omit dev --output-file bom.json --output-format JSON || true
+          npx --yes @cyclonedx/cyclonedx-npm --output-file bom-full.json --output-format JSON || true
+
+      - name: Upload audit + SBOM artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-report-${{ github.run_id }}
+          path: |
+            audit-prod.json
+            audit-full.json
+            audit-summary.md
+            bom.json
+            bom-full.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Ensure security-sweep label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create security-sweep --repo "$GITHUB_REPOSITORY" \
+            --description "Auto-managed by the Security Sweep workflow" \
+            --color B60205 --force 2>/dev/null || true
+
+      - name: Notify on high/critical findings
+        if: steps.audit.outputs.high_critical != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          n=$(jq '[.vulnerabilities[]? | select(.severity=="critical" or .severity=="high")] | length' audit-prod.json 2>/dev/null || echo 0)
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --label security-sweep --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          body=$(cat audit-summary.md)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "🤖 **Scheduled sweep — $(date -u +%Y-%m-%d)**: $n high/critical production finding(s).
+
+          $body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label security-sweep \
+              --title "🛡️ Security sweep: $n high/critical production vulnerability(s)" \
+              --body "🤖 Automated security sweep on $(date -u +%Y-%m-%d).
+
+          $body
+
+          _Auto-managed by the Security Sweep workflow. Resolve via Dependabot PRs (auto-merged by Dependabot Autopilot), then the next sweep will close this issue._"
+          fi
+
+      - name: Close tracking issue when clean
+        if: steps.audit.outputs.high_critical == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          for n in $(gh issue list --repo "$GITHUB_REPOSITORY" --label security-sweep --state open --json number --jq '.[].number' 2>/dev/null || true); do
+            gh issue comment "$n" --repo "$GITHUB_REPOSITORY" \
+              --body "🤖 Scheduled sweep — $(date -u +%Y-%m-%d): 0 high/critical production vulnerabilities. Closing. ✅" || true
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" || true
+          done

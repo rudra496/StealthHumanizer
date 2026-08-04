@@ -1,0 +1,48 @@
+name: OpenSSF Scorecard
+
+# Weekly security-posture scan across 20+ automated checks (Branch-Protection,
+# Code-Review, Pinned-Dependencies, Token-Permissions, Dangerous-Workflow, ...).
+# Self-contained: results are printed in the run log only (publish_results: false).
+# Flip publish_results to true to get the public Scorecard badge + scorecard.dev API.
+
+on:
+  schedule:
+    - cron: "23 6 * * 1"   # Mondays ~06:23 UTC (after Security Sweep)
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions: read-all
+
+concurrency:
+  group: scorecard
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    if: github.repository_owner == 'rudra496'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run Scorecard analysis
+        uses: ossf/scorecard-action@v2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Self-contained: do NOT publish to the external scorecard.dev API.
+          # Set to true to opt into the public badge + REST API.
+          publish_results: false
+
+      - name: Upload Scorecard SARIF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scorecard-sarif-${{ github.run_id }}
+          path: results.sarif
+          retention-days: 30
+
+      - name: Print summary
+        run: |
+          echo "::notice::OpenSSF Scorecard run complete. See 'scorecard-sarif' artifact for full results."
