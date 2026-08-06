@@ -67,7 +67,7 @@
     "eslint-config-next": "^16.3.0",
     "postcss": "^8.5.25",
     "tailwindcss": "^4.3.1",
-    "tsx": "^4.23.4",
+    "tsx": "^4.23.5",
     "typescript": "^6.0.2"
   },
   "description": "Free open-source AI text humanizer with style-aware rewriting",
