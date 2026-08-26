@@ -1,21 +1,22 @@
 cff-version: 1.2.0
-title: "StealthHumanizer — Free AI Text Humanizer"
-message: "If you use this software, please cite it as below."
-type: software
+message: "If you use StealthHumanizer or reference its linguistic transformation models, please cite it as below."
+title: "StealthHumanizer: Open-Source AI Text Transformation Engine & Adversarial Linguistic Stylometry"
 authors:
-  - given-names: Rudra
-    family-names: Sarker
+  - family-names: "Sarker"
+    given-names: "Rudra"
     affiliation: "Shahjalal University of Science and Technology, Bangladesh"
     orcid: "https://orcid.org/0009-0001-4545-0932"
+doi: "10.5281/zenodo.22118705"
+abstract: "StealthHumanizer is an open-source AI text transformation engine featuring 35 providers, 4 rewrite levels, style-aware processing, and sub-1B parameter specialized BART architecture with 0.924 BERTScore fidelity."
+version: "2.4.2"
+date-released: "2026-08-26"
+license: "MIT"
 repository-code: "https://github.com/rudra496/StealthHumanizer"
 url: "https://stealthhumanizer.vercel.app/"
-abstract: "Free open-source AI text humanizer with 35 providers, 4 rewrite levels, and 16+ language support. No login required."
 keywords:
-  - AI
-  - text-humanizer
-  - NLP
-  - education
-  - open-source
-license: MIT
-version: "2.4.2"
-date-released: "2026-06-01"
+  - "ai-text-humanizer"
+  - "nlp"
+  - "natural-language-processing"
+  - "adversarial-nlp"
+  - "bertscore"
+  - "open-source"
