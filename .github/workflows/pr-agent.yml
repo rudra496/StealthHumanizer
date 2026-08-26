@@ -95,22 +95,23 @@ jobs:
               ? `### 🛡️ Security & Quality Findings\n${findings.join('\n')}`
               : `### 🛡️ Security & Quality Assessment\n- ✅ No hardcoded secrets or suspicious debugging statements detected.`;
 
-            const commentBody = `## 🤖 Autonomous PR Agent Review
-
-### 📊 Change Overview
-- **Files Changed**: \`${fileCount}\`
-- **Lines Added**: \`+${additions}\`
-- **Lines Deleted**: \`-${deletions}\`
-- **Triage Size**: \`${sizeLabel}\`
-
-### 📁 Modified Files (Top 10)
-${fileListStr}
-
-${securitySection}
-
-### ✅ Recommendation
-- All automated checks initiated. Ensure CI builds pass before merging.
-`;
+            const commentBody = [
+              '## 🤖 Autonomous PR Agent Review',
+              '',
+              '### 📊 Change Overview',
+              `- **Files Changed**: \`${fileCount}\``,
+              `- **Lines Added**: \`+${additions}\``,
+              `- **Lines Deleted**: \`-${deletions}\``,
+              `- **Triage Size**: \`${sizeLabel}\``,
+              '',
+              '### 📁 Modified Files (Top 10)',
+              fileListStr,
+              '',
+              securitySection,
+              '',
+              '### ✅ Recommendation',
+              '- All automated checks initiated. Ensure CI builds pass before merging.'
+            ].join('\n');
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
