@@ -49,7 +49,7 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "jspdf": "^4.2.1",
-    "lucide-react": "^1.37.0",
+    "lucide-react": "^1.38.0",
     "mammoth": "^1.12.2",
     "next": "16.3.3",
     "pdfjs-dist": "^6.3.289",
