@@ -4,6 +4,7 @@ import './globals.css';
 const SITE_URL = 'https://stealthhumanizer.vercel.app';
 
 export const metadata: Metadata = {
+  verification: { google: "2h0hS6xG91EuQjYI1FZAHqQHxFmu7l70BmcSz62ZLmc" },
   title: 'StealthHumanizer — Free AI Text Humanizer | Bypass GPTZero & AI Detectors | 35 Providers',
   description:
     'Transform AI-generated text into natural, human-like writing. Free, open-source, no login required. Bypass GPTZero and AI detectors with 35 AI providers, 4 rewrite levels, multi-pass ninja mode, grammar check, and 16+ languages.',
