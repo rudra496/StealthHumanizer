@@ -8,6 +8,12 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    ignore:
+      # typescript >=7 cannot resolve in this repo: eslint-config-next@16.3.x
+      # bundles @typescript-eslint/typescript-estree, which peers <6.1.0, so
+      # pnpm's strict resolution fails and kills the whole daily update job.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
