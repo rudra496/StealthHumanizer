@@ -1,0 +1,13 @@
+{
+  "id": "rudrasarkerrs/stealthhumanizer-raft",
+  "title": "stealthhumanizer-raft",
+  "code_file": "train_raft.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["rudrasarkerrs/stealthhumanizer-pairs"],
+  "competition_sources": [],
+  "kernel_sources": ["rudrasarkerrs/stealthhumanizer-sft"]
+}

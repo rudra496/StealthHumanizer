@@ -53,6 +53,21 @@ Prefer a different default? Set `NEXT_PUBLIC_DEFAULT_PROVIDER=gemini` (or any ot
 
 ---
 
+## Self-trained model + best-of-N serving (v3)
+
+Short-text humanization now runs on **our own fine-tuned model**
+([rudra496/stealthhumanizer-bart](https://huggingface.co/rudra496/stealthhumanizer-bart),
+BART-large 406M trained on ~7K real+synthetic pairs — HC3, RAID, Q1 open-access
+abstracts) instead of the third-party cive202 checkpoint.
+
+Serving uses **sampling best-of-8**: beam search collapses to generic AI-like
+output (detector ≈0.99), but sampling 8 diverse candidates and returning the
+least-AI-detected one (with an input-fidelity guard) measured **~0.38 mean
+AI-probability** on held-out pairs. Degenerate samples (glued words, duplicated
+words) are filtered and repaired before the response.
+
+Full pipeline, benchmarks and reproduction steps: [`training/TRAINING.md`](./training/TRAINING.md).
+
 ## What's new in 2.3
 
 A focused quality + reliability pass. The headline change: **the output no longer breaks.**

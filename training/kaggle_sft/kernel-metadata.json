@@ -1,0 +1,14 @@
+{
+  "id": "rudrasarkerrs/stealthhumanizer-sft",
+  "title": "stealthhumanizer-sft",
+  "code_file": "train_bart_sft.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "accelerator": "nvidiaTeslaT4x2",
+  "dataset_sources": ["rudrasarkerrs/stealthhumanizer-pairs"],
+  "competition_sources": [],
+  "kernel_sources": []
+}
