@@ -229,6 +229,9 @@ async def humanize(req: HumanizeRequest):
             return 2 * p * r / max(1e-9, p + r)
 
         src_len = max(1, len(req.text))
+        # Cap decode length to input+margin — an uncapped 1024 lets a rambling
+        # sample multiply latency several-fold on the ARM CPU.
+        gen_max = min(1024, int(inputs["input_ids"].shape[1] * 1.6) + 80)
 
         def _clean(c: str) -> str:
             c = c.strip()
@@ -243,7 +246,7 @@ async def humanize(req: HumanizeRequest):
                 with torch.no_grad():
                     outputs = model.generate(
                         **inputs,
-                        max_length=1024,
+                        max_length=gen_max,
                         do_sample=True,
                         temperature=temp,
                         top_p=0.95,
@@ -295,12 +298,34 @@ async def humanize(req: HumanizeRequest):
             chunks = _chunk_sentences(req.text)
             if len(chunks) <= 1:
                 raise ValueError("not chunkable")
+            # Batch ALL chunks in ONE generate pass (sequential per-chunk calls
+            # blew past Vercel's 110s upstream fetch budget on the ARM CPU).
+            n_per = min(BEST_OF_N, 6)
+            enc_chunks = tokenizer(chunks, return_tensors="pt", padding=True,
+                                   truncation=True, max_length=512)
+            in_len = enc_chunks["input_ids"].shape[1]
+            ch_max = min(700, int(in_len * 1.6) + 64)
+            rep = {k: v.repeat_interleave(n_per, dim=0) for k, v in enc_chunks.items()}
+            with torch.no_grad():
+                outputs = model.generate(
+                    **rep,
+                    max_length=ch_max,
+                    do_sample=True,
+                    temperature=max(0.5, min(1.0, req.temperature + 0.2)),
+                    top_p=0.95,
+                    num_beams=1,
+                    no_repeat_ngram_size=3,
+                )
+            decs = [_clean(c) for c in tokenizer.batch_decode(outputs, skip_special_tokens=True)]
             parts = []
-            for ch in chunks:
-                sub = await humanize(HumanizeRequest(text=ch, temperature=req.temperature, num_beams=req.num_beams))
-                parts.append(sub.humanized)
+            for ci, chunk in enumerate(chunks):
+                seg = decs[ci * n_per:(ci + 1) * n_per]
+                seg = [c for c in seg if c and not re.search(r"[a-z]{2}[A-Z][a-z]{2}", c)]
+                seg = [c for c in seg if 0.4 < len(c) / max(1, len(chunk)) < 1.8]
+                # keep original chunk if every sample was degenerate — never lose text
+                parts.append(min(seg, key=_ai_prob) if seg else chunk)
             out = " ".join(parts)
-            used_model = f"bart:{SHORT_HUMANIZER_ID}+bon{BEST_OF_N}+chunked"
+            used_model = f"bart:{SHORT_HUMANIZER_ID}+bon{n_per}+chunked"
         except Exception:
             logger.exception("chunked short-path failed; falling back to ollama")
             payload = {
