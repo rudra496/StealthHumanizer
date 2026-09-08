@@ -220,13 +220,81 @@ async def humanize(req: HumanizeRequest):
                 p = (p + _model_ai_prob(det2_tok, det2_model, txt)) / 2.0
             return p
 
-        def _f1_vs_input(c: str) -> float:
-            aw, bw = req.text.lower().split(), c.lower().split()
+        def _f1_gen(src: str, c: str) -> float:
+            aw, bw = src.lower().split(), c.lower().split()
             common = set(aw) & set(bw)
             if not common:
                 return 0.0
             p, r = len(common) / max(1, len(aw)), len(common) / max(1, len(bw))
             return 2 * p * r / max(1e-9, p + r)
+
+        def _f1_vs_input(c: str) -> float:
+            return _f1_gen(req.text, c)
+
+        _NEG = ("not", "no", "never", "cannot", "can't", "don't", "doesn't", "didn't",
+                "won't", "isn't", "aren't", "wasn't", "weren't", "without", "nor")
+        _NUM_RE = re.compile(r"\d+(?:[.,]\d+)?")
+        _ENT_RE = re.compile(r"\b[A-Z][a-z]{2,}\b")
+        _ENT_STOP = {"the", "this", "that", "these", "those", "it", "in", "on",
+                     "if", "furthermore", "moreover", "however", "consequently",
+                     "additionally", "ultimately", "nevertheless", "first", "second",
+                     "third", "finally", "to", "for", "and", "but", "so", "there",
+                     "thus", "hence", "also", "such", "some", "any", "sometimes",
+                     "people", "governments"}
+
+        def _ents(t: str) -> set:
+            return {w for w in _ENT_RE.findall(t) if w.lower() not in _ENT_STOP}
+
+        def _neg_count(t: str) -> int:
+            return sum(1 for w in t.lower().split() if w.strip(".,;:!'\"") in _NEG)
+
+        def _meaning_ok(c: str) -> bool:
+            """Hard meaning-preservation gate — the detector must never be
+            fooled by hallucinated or truncated content."""
+            # length: reject anything that lost or grew more than ~35%
+            if not (0.65 <= len(c) / src_len <= 1.45):
+                return False
+            # numbers must survive (a lost "1.5 degrees" inverts facts)
+            if _NUM_RE.findall(req.text) != _NUM_RE.findall(c):
+                return False
+            # no invented proper-noun entities ("UEC", "Federal Electricity Corporation of India")
+            if _ents(c) - _ents(req.text):
+                return False
+            # negations must not appear/disappear (meaning inversion)
+            if abs(_neg_count(c) - _neg_count(req.text)) > 1:
+                return False
+            # core topical overlap
+            return _f1_vs_input(c) >= 0.40
+
+        def _meaning_ok_gen(src: str, c: str) -> bool:
+            """Meaning gate against an arbitrary source (input or chunk)."""
+            sl = max(1, len(src))
+            if not (0.65 <= len(c) / sl <= 1.45):
+                return False
+            if _NUM_RE.findall(src) != _NUM_RE.findall(c):
+                return False
+            if _ents(c) - _ents(src):
+                return False
+            if abs(_neg_count(c) - _neg_count(src)) > 1:
+                return False
+            return _f1_gen(src, c) >= 0.40
+
+        def _meaning_ok(c: str) -> bool:
+            return _meaning_ok_gen(req.text, c)
+
+        def _pick_gen(src: str, cands: list) -> str:
+            good = [c for c in cands if _meaning_ok_gen(src, c)]
+            if good:
+                return min(good, key=lambda c: _ai_prob(c) - 0.3 * _f1_gen(src, c))
+            safer = [c for c in cands
+                     if not (_ents(c) - _ents(src))
+                     and _neg_count(c) == _neg_count(src) and c.strip()]
+            if safer:
+                return max(safer, key=lambda c: _f1_gen(src, c))
+            return max(cands, key=lambda c: _f1_gen(src, c)) if cands else src
+
+        def _pick(cands: list) -> str:
+            return _pick_gen(req.text, cands)
 
         src_len = max(1, len(req.text))
         # Cap decode length to input+margin — an uncapped 1024 lets a rambling
@@ -239,6 +307,7 @@ async def humanize(req: HumanizeRequest):
             c = re.sub(r"\b(\w+)( \1)+\b", r"\1", c, count=2)
             c = re.sub(r"^\s*(?:\d+\.\s*|[-*]\s+)", "", c)
             c = re.sub(r"\b([A-Z][a-z]{2,})([A-Z][a-z]{2,})\b", r"\1 \2", c)
+            c = ". ".join(s[:1].upper() + s[1:] for s in c.split(". "))
             return c
 
         def _sample_round(temp: float) -> list:
@@ -263,38 +332,47 @@ async def humanize(req: HumanizeRequest):
             cands = [c for c in cands if c and not re.search(r"[a-z]{2}[A-Z][a-z]{2}", c)]
             return [c for c in cands if 0.45 < len(c) / src_len < 1.7]
 
-        # Adaptive resampling: rank by ai_prob − 0.3·fidelity (validated middle
-        # ground between incoherent drift and AI-looking text); keep sampling
-        # hotter rounds until the best candidate clears the threshold.
+        # Adaptive resampling with a MEANING-FIRST gate: candidates that drop
+        # numbers, invent entities, flip negations, or drift too far are
+        # disqualified outright — detectors cannot tell "human-sounding" from
+        # "broken", so the gate does that job. Among safe candidates we take
+        # the least AI-looking; resampling continues if none is safe yet.
         # HARD TIME BUDGET: Vercel Hobby clamps functions to 60s and its client
-        # aborts upstream at ~110s — never sample past 30s elapsed; bigger
-        # inputs get fewer candidates so even round 1 fits the budget.
+        # aborts upstream at ~110s — never sample past 30s elapsed.
         base_temp = max(0.5, min(1.0, req.temperature + 0.2))
-        best_c, best_raw = None, 1.1
+        pool: list = []
+        best_c = None
         for round_temp in (base_temp, min(1.15, base_temp + 0.15), min(1.25, base_temp + 0.3)):
-            round_c = _sample_round(round_temp)
-            if round_c:
-                c_best = min(round_c, key=lambda c: _ai_prob(c) - 0.3 * _f1_vs_input(c))
-                c_raw = _ai_prob(c_best)
-                if best_c is None or c_raw < best_raw:
-                    best_c, best_raw = c_best, c_raw
-            if best_raw < RESAMPLE_THRESHOLD:
-                break
-            if (time.perf_counter() - t0) > 30:
+            pool.extend(_sample_round(round_temp))
+            if pool:
+                best_c = _pick(pool)
+                if _meaning_ok(best_c) and _ai_prob(best_c) < RESAMPLE_THRESHOLD:
+                    break
+            if (time.perf_counter() - t0) > 20:
                 break
 
+        # No meaning-safe candidate after all rounds? Ship the BEAM output —
+        # it is fluent and faithful. Broken text must never ship even if the
+        # detector scores broken prose as "human".
+        if best_c is None or not (_meaning_ok(best_c) and _f1_vs_input(best_c) >= 0.50):
+            try:
+                with torch.no_grad():
+                    outputs = model.generate(
+                        **inputs,
+                        max_length=gen_max,
+                        num_beams=2,
+                        no_repeat_ngram_size=3,
+                        length_penalty=1.0,
+                        early_stopping=True,
+                    )
+                beam_c = _clean(tokenizer.decode(outputs[0], skip_special_tokens=True))
+                if beam_c:
+                    if best_c is None or _meaning_ok(beam_c) or _f1_gen(req.text, beam_c) > _f1_vs_input(best_c):
+                        best_c = beam_c
+            except Exception:
+                logger.exception("beam fallback failed")
         if best_c is None:
-            # fallback: single beam-search output (previous behaviour)
-            with torch.no_grad():
-                outputs = model.generate(
-                    **inputs,
-                    max_length=1024,
-                    num_beams=4,
-                    no_repeat_ngram_size=3,
-                    length_penalty=1.0,
-                    early_stopping=True,
-                )
-            best_c = _clean(tokenizer.decode(outputs[0], skip_special_tokens=True)) or req.text
+            best_c = req.text
         out = best_c
         used_model = f"bart:{SHORT_HUMANIZER_ID}+bon{BEST_OF_N}{'x2' if det2_model is not None else ''}"
     else:
@@ -303,11 +381,11 @@ async def humanize(req: HumanizeRequest):
         # fallback if the chunked path fails).
         try:
             chunks = _chunk_sentences(req.text)
-            if len(chunks) <= 1:
-                raise ValueError("not chunkable")
+            if len(chunks) <= 1 or len(chunks) > 3:
+                raise ValueError("chunk count out of batchable range")
             # Batch ALL chunks in ONE generate pass (sequential per-chunk calls
             # blew past Vercel's 110s upstream fetch budget on the ARM CPU).
-            n_per = min(BEST_OF_N, 6)
+            n_per = 4
             enc_chunks = tokenizer(chunks, return_tensors="pt", padding=True,
                                    truncation=True, max_length=512)
             in_len = enc_chunks["input_ids"].shape[1]
@@ -328,9 +406,9 @@ async def humanize(req: HumanizeRequest):
             for ci, chunk in enumerate(chunks):
                 seg = decs[ci * n_per:(ci + 1) * n_per]
                 seg = [c for c in seg if c and not re.search(r"[a-z]{2}[A-Z][a-z]{2}", c)]
-                seg = [c for c in seg if 0.4 < len(c) / max(1, len(chunk)) < 1.8]
-                # keep original chunk if every sample was degenerate — never lose text
-                parts.append(min(seg, key=_ai_prob) if seg else chunk)
+                seg = [c for c in seg if 0.65 <= len(c) / max(1, len(chunk)) <= 1.45]
+                # same meaning-first gate as the short path (per chunk)
+                parts.append(_pick_gen(chunk, seg) if seg else chunk)
             out = " ".join(parts)
             used_model = f"bart:{SHORT_HUMANIZER_ID}+bon{n_per}+chunked"
         except Exception:
