@@ -4,6 +4,7 @@ How StealthHumanizer's own BART humanizer (`rudra496/stealthhumanizer-bart`) was
 built on 100% free resources (Kaggle GPU + Groq free tier + Hugging Face).
 
 ## Data recipe (~7K pairs, `pairs.jsonl` format: {"id","ai","human","gen_model"})
+
 | Source | Type | Count | How |
 |---|---|---|---|
 | HC3 (`Hello-SimpleAI/HC3`) | real human vs ChatGPT, same prompts | 4,500 | `build_hc3.py` (direct jsonl download) |
@@ -25,6 +26,7 @@ built on 100% free resources (Kaggle GPU + Groq free tier + Hugging Face).
 - `accelerator` metadata field does not change the assigned GPU.
 
 ## Benchmark (40 held-out academic pairs, detector = fakespot RoBERTa)
+
 | System | AI-prob (lower=better) | Word-F1 vs human (higher=better) |
 |---|---|---|
 | raw AI text | 0.9998 | 0.191 |
