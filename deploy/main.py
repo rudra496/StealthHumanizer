@@ -283,15 +283,19 @@ async def humanize(req: HumanizeRequest):
             return _meaning_ok_gen(req.text, c)
 
         def _pick_gen(src: str, cands: list) -> str:
+            sl = max(1, len(src))
             good = [c for c in cands if _meaning_ok_gen(src, c)]
             if good:
                 return min(good, key=lambda c: _ai_prob(c) - 0.3 * _f1_gen(src, c))
+            # safer tier keeps the SAME length band as the meaning gate — a
+            # candidate 55% longer than the input is drift, not "safe"
             safer = [c for c in cands
-                     if not (_ents(c) - _ents(src))
+                     if 0.65 <= len(c) / sl <= 1.45
+                     and not (_ents(c) - _ents(src))
                      and _neg_count(c) == _neg_count(src) and c.strip()]
             if safer:
                 return max(safer, key=lambda c: _f1_gen(src, c))
-            return max(cands, key=lambda c: _f1_gen(src, c)) if cands else src
+            return None  # nothing meaning-safe — caller must use the beam
 
         def _pick(cands: list) -> str:
             return _pick_gen(req.text, cands)
@@ -345,10 +349,12 @@ async def humanize(req: HumanizeRequest):
         for round_temp in (base_temp, min(1.15, base_temp + 0.15), min(1.25, base_temp + 0.3)):
             pool.extend(_sample_round(round_temp))
             if pool:
-                best_c = _pick(pool)
-                if _meaning_ok(best_c) and _ai_prob(best_c) < RESAMPLE_THRESHOLD:
-                    break
-            if (time.perf_counter() - t0) > 20:
+                picked = _pick(pool)
+                if picked is not None:
+                    best_c = picked
+                    if _meaning_ok(best_c) and _ai_prob(best_c) < RESAMPLE_THRESHOLD:
+                        break
+            if (time.perf_counter() - t0) > 15:
                 break
 
         # No meaning-safe candidate after all rounds? Ship the BEAM output —
@@ -360,14 +366,17 @@ async def humanize(req: HumanizeRequest):
                     outputs = model.generate(
                         **inputs,
                         max_length=gen_max,
-                        num_beams=2,
+                        num_beams=4,
                         no_repeat_ngram_size=3,
                         length_penalty=1.0,
                         early_stopping=True,
                     )
                 beam_c = _clean(tokenizer.decode(outputs[0], skip_special_tokens=True))
                 if beam_c:
-                    if best_c is None or _meaning_ok(beam_c) or _f1_gen(req.text, beam_c) > _f1_vs_input(best_c):
+                    # the beam is fluent and faithful; accept it over any
+                    # drifted/broken sampled candidate (natural rewrites may
+                    # add negations, so the strict gate does not apply here)
+                    if best_c is None or _meaning_ok(beam_c) or _f1_gen(req.text, beam_c) >= 0.40:
                         best_c = beam_c
             except Exception:
                 logger.exception("beam fallback failed")
