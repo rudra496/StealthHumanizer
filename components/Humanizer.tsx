@@ -778,11 +778,11 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-sm font-medium text-dark-300 mb-2">
-                    <Type className="w-4 h-4 text-accent-400" /> Max Output Words: {maxOutputWords === 0 ? 'Unlimited' : maxOutputWords}
+                    <Type className="w-4 h-4 text-accent-400" /> Max Output Words: {maxOutputWords === 0 ? 'Full length (no cap)' : `Cap at ${maxOutputWords}`}
                   </label>
                   <input type="range" min="0" max="5000" step="100" value={maxOutputWords} onChange={e => setMaxOutputWords(Number(e.target.value))}
                     className="w-full accent-accent-500" />
-                  <div className="flex justify-between text-xs text-dark-500 mt-1"><span>None</span><span>2500</span><span>5000</span></div>
+                  <div className="flex justify-between text-xs text-dark-500 mt-1"><span>No cap — output keeps full input length</span><span>2500</span><span>5000</span></div>
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-sm font-medium text-dark-300 mb-2">
@@ -937,7 +937,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
               Recommended: <strong>Humanize</strong> style. Sample text loaded — click Humanize to try it!
             </div>
           )}
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-1">
             <label className="text-sm font-medium text-dark-300">Input Text</label>
             <div className="flex items-center gap-2">
               <span className={`text-xs ${wordCount > 10000 ? 'text-red-400' : 'text-dark-500'}`}>{wordCount} / 10,000 words</span>
@@ -948,6 +948,9 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
               <input ref={fileInputRef} type="file" accept=".txt,.docx,.pdf" className="hidden" onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0])} />
             </div>
           </div>
+          <p className="text-xs text-dark-500 mb-2">
+            💡 Best results: 40–300 words. Expect ~15–40s for ≤150 words; longer texts take proportionally longer (up to ~2 min).
+          </p>
 
           {/* Drop zone */}
           <div className="perspective-container">

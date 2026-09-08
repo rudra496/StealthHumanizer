@@ -242,6 +242,8 @@ async def humanize(req: HumanizeRequest):
             return c
 
         def _sample_round(temp: float) -> list:
+            # longer inputs get fewer candidates so even round 1 fits the budget
+            n_eff = BEST_OF_N if len(req.text.split()) <= 80 else 6
             try:
                 with torch.no_grad():
                     outputs = model.generate(
@@ -252,7 +254,7 @@ async def humanize(req: HumanizeRequest):
                         top_p=0.95,
                         num_beams=1,
                         no_repeat_ngram_size=3,
-                        num_return_sequences=BEST_OF_N,
+                        num_return_sequences=n_eff,
                     )
                 cands = [_clean(c) for c in tokenizer.batch_decode(outputs, skip_special_tokens=True)]
             except Exception:
@@ -264,6 +266,9 @@ async def humanize(req: HumanizeRequest):
         # Adaptive resampling: rank by ai_prob − 0.3·fidelity (validated middle
         # ground between incoherent drift and AI-looking text); keep sampling
         # hotter rounds until the best candidate clears the threshold.
+        # HARD TIME BUDGET: Vercel Hobby clamps functions to 60s and its client
+        # aborts upstream at ~110s — never sample past 30s elapsed; bigger
+        # inputs get fewer candidates so even round 1 fits the budget.
         base_temp = max(0.5, min(1.0, req.temperature + 0.2))
         best_c, best_raw = None, 1.1
         for round_temp in (base_temp, min(1.15, base_temp + 0.15), min(1.25, base_temp + 0.3)):
@@ -274,6 +279,8 @@ async def humanize(req: HumanizeRequest):
                 if best_c is None or c_raw < best_raw:
                     best_c, best_raw = c_best, c_raw
             if best_raw < RESAMPLE_THRESHOLD:
+                break
+            if (time.perf_counter() - t0) > 30:
                 break
 
         if best_c is None:
