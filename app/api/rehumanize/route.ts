@@ -7,6 +7,7 @@ import { detectAI } from '@/lib/detector';
 import { ModelProvider, StylePreset } from '@/lib/types';
 import { chooseImprovedRewrite, parseRehumanizedLines, replaceSentencesInText } from '@/lib/rehumanize';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { humanizeWithRudra } from '@/lib/server/rudra-free';
 
 const VALID_STYLES = ['academic', 'business', 'creative', 'casual', 'technical', 'humanize', 'professional'];
 
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
     if (!Array.isArray(flaggedSentences) || flaggedSentences.length === 0) {
       return NextResponse.json({ success: false, error: 'flaggedSentences is required' }, { status: 400 });
     }
-    if (!model || !apiKey) {
+    if (!model || (!apiKey && model !== 'rudra-free')) {
       return NextResponse.json({ success: false, error: 'model and apiKey are required for re-humanization' }, { status: 400 });
     }
     if (fullText && typeof fullText === 'string' && fullText.length > 50000) {
@@ -64,17 +65,25 @@ export async function POST(request: NextRequest) {
     let usedFallback = false;
 
     try {
-      const rehumanizePrompt = getRehumanizePrompt(cleanFlagged, style || 'humanize');
-      const contextPrompt = fullText
-        ? `${rehumanizePrompt}\n\nFULL TEXT CONTEXT (do not rewrite all of this; only rewrite the numbered flagged sentences above):\n"""\n${String(fullText).slice(0, 6000)}\n"""`
-        : rehumanizePrompt;
-      const result = await generateWithProvider(model as ModelProvider, apiKey, contextPrompt, '', {
-        model: modelId,
-        temperature: 0.95,
-        topP: 0.95,
-        maxTokens: Math.min(4096, Math.max(1024, cleanFlagged.join(' ').length * 2)),
-      });
-      rawRewrites = parseRehumanizedLines(result);
+      if (model === 'rudra-free') {
+        // Self-trained model path: rewrite each flagged sentence on the
+        // hosted VPS ensemble (no provider API key needed).
+        rawRewrites = await Promise.all(
+          cleanFlagged.map(s => humanizeWithRudra(s).then(r => r.humanized).catch(() => '')),
+        );
+      } else {
+        const rehumanizePrompt = getRehumanizePrompt(cleanFlagged, style || 'humanize');
+        const contextPrompt = fullText
+          ? `${rehumanizePrompt}\n\nFULL TEXT CONTEXT (do not rewrite all of this; only rewrite the numbered flagged sentences above):\n"""\n${String(fullText).slice(0, 6000)}\n"""`
+          : rehumanizePrompt;
+        const result = await generateWithProvider(model as ModelProvider, apiKey, contextPrompt, '', {
+          model: modelId,
+          temperature: 0.95,
+          topP: 0.95,
+          maxTokens: Math.min(4096, Math.max(1024, cleanFlagged.join(' ').length * 2)),
+        });
+        rawRewrites = parseRehumanizedLines(result);
+      }
     } catch {
       usedFallback = true;
     }

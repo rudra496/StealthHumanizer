@@ -449,7 +449,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   const handleRehumanize = async () => {
     if (!result) return;
     const { providerId, apiKey } = getApiCredentials();
-    if (!apiKey) { showToast('warning', 'No API key configured'); return; }
+    if (!apiKey && providerId !== 'rudra-free') { showToast('warning', 'No API key configured'); return; }
 
     setRehumanizing(true);
     let currentFullText = result.fullText;
