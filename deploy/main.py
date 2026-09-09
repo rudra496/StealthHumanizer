@@ -277,7 +277,7 @@ async def humanize(req: HumanizeRequest):
                 return False
             if abs(_neg_count(c) - _neg_count(src)) > 1:
                 return False
-            return _f1_gen(src, c) >= 0.40
+            return _f1_gen(src, c) >= 0.30
 
         def _meaning_ok(c: str) -> bool:
             return _meaning_ok_gen(req.text, c)
@@ -286,7 +286,7 @@ async def humanize(req: HumanizeRequest):
             sl = max(1, len(src))
             good = [c for c in cands if _meaning_ok_gen(src, c)]
             if good:
-                return min(good, key=lambda c: _ai_prob(c) - 0.3 * _f1_gen(src, c))
+                return min(good, key=lambda c: _ai_prob(c) - 0.2 * _f1_gen(src, c))
             # safer tier keeps the SAME length band as the meaning gate — a
             # candidate 55% longer than the input is drift, not "safe"
             safer = [c for c in cands
@@ -311,6 +311,12 @@ async def humanize(req: HumanizeRequest):
             c = re.sub(r"\b(\w+)( \1)+\b", r"\1", c, count=2)
             c = re.sub(r"^\s*(?:\d+\.\s*|[-*]\s+)", "", c)
             c = re.sub(r"\b([A-Z][a-z]{2,})([A-Z][a-z]{2,})\b", r"\1 \2", c)
+            c = re.sub(r"\s+([,.;:!?])", r"\1", c)
+            c = re.sub(r"([,.;:!?]){2,}", r"\1", c)
+            c = re.sub(r"[ \t]{2,}", " ", c)
+            # sentence-completion: never leave a fragment without closure
+            if c and c[-1] not in ".!?":
+                c += "."
             c = ". ".join(s[:1].upper() + s[1:] for s in c.split(". "))
             return c
 
