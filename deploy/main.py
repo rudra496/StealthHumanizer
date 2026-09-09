@@ -290,7 +290,7 @@ async def humanize(req: HumanizeRequest):
     if not sentences:
         raise HTTPException(400, "no sentences found")
     # candidate budget: more sentences -> fewer per sentence (batch fits CPU)
-    n_per = 8 if len(sentences) <= 14 else 5
+    n_per = 5 if len(sentences) <= 14 else 4
     sentences = sentences[:60]  # absolute cap; the tail would exceed budgets
 
     base_temp = max(0.6, min(1.0, req.temperature + 0.25))
@@ -301,7 +301,7 @@ async def humanize(req: HumanizeRequest):
         with torch.no_grad():
             outputs = model.generate(
                 **rep,
-                max_length=192,
+                max_length=120,
                 do_sample=True,
                 temperature=base_temp,
                 top_p=0.95,
