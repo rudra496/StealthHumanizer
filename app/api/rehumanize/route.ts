@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         // Self-trained model path: rewrite each flagged sentence on the
         // hosted VPS ensemble (no provider API key needed).
         rawRewrites = await Promise.all(
-          cleanFlagged.map(s => humanizeWithRudra(s).then(r => r.humanized).catch(() => '')),
+          cleanFlagged.map(s => humanizeWithRudra(s).then(r => r.text).catch(() => '')),
         );
       } else {
         const rehumanizePrompt = getRehumanizePrompt(cleanFlagged, style || 'humanize');
