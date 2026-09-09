@@ -166,13 +166,13 @@ export const PROVIDERS: Provider[] = [
   {
     id: 'groq',
     name: 'Groq',
-    description: 'Ultra-fast inference with Llama/Mixtral models. FREE tier!',
+    description: 'Ultra-fast inference with Qwen, GPT-OSS and Compound models. FREE tier!',
     free: true,
     apiUrl: 'https://api.groq.com/openai/v1/chat/completions',
     getApiKeyUrl: 'https://console.groq.com/keys',
     docsUrl: 'https://console.groq.com/docs',
-    defaultModel: 'llama-3.3-70b-versatile',
-    models: ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'mixtral-8x7b-32768', 'gemma2-9b-it'],
+    defaultModel: 'qwen/qwen3.8-27b',
+    models: ['qwen/qwen3.8-27b', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'groq/compound-mini'],
     placeholder: 'gsk_...',
   },
   {
