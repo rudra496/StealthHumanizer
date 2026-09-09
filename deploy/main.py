@@ -333,6 +333,9 @@ async def humanize(req: HumanizeRequest):
                  if not any(len(w) <= 3 and w.lower().strip(".,;:!?") not in _SHORT_OK
                             and w.lower().strip(".,;:!?") not in src_tokens
                             for w in c.split() if w.isalpha())]
+        # parens in the candidate when the source has none = garbled prefix
+        if "(" not in src_sentence:
+            cands = [c for c in cands if "(" not in c]
         out_parts.append(_pick_sentence(src_sentence, cands))
     out = " ".join(out_parts)
     used_model = f"bart:{SHORT_HUMANIZER_ID}+sent{n_per}{'x2' if det2_model is not None else ''}"
