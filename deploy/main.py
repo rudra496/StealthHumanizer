@@ -52,8 +52,8 @@ OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "120"))
 # Auto-routing by input length:
 # - <=150 words: cive202 BART-large (sub-1B specialized humanizer, ~10s)
 # - >150 words: gemma3:4b via Ollama (only faithful option, 25-90s)
-LONG_MODEL = os.environ.get("OLLAMA_HUMANIZER_LONG", "granite-4.2:3b")
-SHORT_WORD_CAP = int(os.environ.get("HUMANIZER_SHORT_WORD_CAP", "100"))
+LONG_MODEL = os.environ.get("OLLAMA_HUMANIZER_LONG", "gemma3:4b")
+SHORT_WORD_CAP = int(os.environ.get("HUMANIZER_SHORT_WORD_CAP", "150"))
 
 HUMANIZE_SYSTEM_PROMPT = (
     "You are an AI text humanizer. Rewrite the user's text so it reads like a real person wrote it. "
@@ -191,27 +191,26 @@ async def humanize(req: HumanizeRequest):
         raise HTTPException(503, "models not loaded yet")
     t0 = time.perf_counter()
 
-    # ===== Long input (>SHORT_WORD_CAP words): Granite-4.2 direct =====
-    # Instruction-tuned, casual human voice, ~26-35s — fits the Vercel budget.
-    # The BART ensemble below handles the short path (its near-paraphrase
-    # output on long formal text is what detectors flag hardest).
+    # ===== Long input (>SHORT_WORD_CAP words): gemma3:4b via Ollama =====
+    # The proven previous structure: the instruction model handles long-form
+    # with the anti-detection system prompt (~25-90s); the BART ensemble below
+    # handles short text with per-sentence best-of-N.
     if not _is_short(req.text):
         try:
             payload = {
                 "model": LONG_MODEL,
                 "stream": False,
-                "think": False,
                 "keep_alive": -1,
                 "messages": [
                     {"role": "system", "content": HUMANIZE_SYSTEM_PROMPT},
                     {"role": "user", "content": req.text},
                 ],
                 "options": {"temperature": max(0.7, min(1.0, req.temperature)),
-                            "top_p": 0.95, "num_predict": 700},
+                            "top_p": 0.95, "num_predict": max(2048, len(req.text) * 2)},
             }
-            async with httpx.AsyncClient(timeout=45) as client:
+            async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
                 r = None
-                for attempt in range(2):  # transient 404/5xx seen while ollama (re)loads a model
+                for attempt in range(2):  # transient failures while ollama (re)loads a model
                     r = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload,
                                           headers={"Content-Type": "application/json"})
                     if r.status_code == 200:
@@ -220,9 +219,9 @@ async def humanize(req: HumanizeRequest):
                     await asyncio.sleep(2)
             out = r.json().get("message", {}).get("content", "").strip() if r is not None else ""
             if not out:
-                raise ValueError("empty granite response")
+                raise ValueError("empty ollama response")
         except Exception:
-            logger.exception("granite long-path failed; returning input unchanged")
+            logger.exception("gemma long-path failed; returning input unchanged")
             out = req.text
         if len(out) >= 2 and out[0] == out[-1] and out[0] in ('"', "'", "`"):
             out = out[1:-1].strip()
@@ -263,7 +262,7 @@ async def humanize(req: HumanizeRequest):
     _NEG = ("not", "no", "never", "cannot", "can't", "don't", "doesn't", "didn't",
             "won't", "isn't", "aren't", "wasn't", "weren't", "without", "nor")
     _NUM_RE = re.compile(r"\d+(?:[.,]\d+)?")
-    _ENT_RE = re.compile(r"[A-Z][a-z]{2,}")
+    _ENT_RE = re.compile(r"\b[A-Z][a-z]{2,}\b")
     _ENT_STOP = {"the", "this", "that", "these", "those", "it", "in", "on",
                  "if", "furthermore", "moreover", "however", "consequently",
                  "additionally", "ultimately", "nevertheless", "first", "second",
@@ -291,12 +290,12 @@ async def humanize(req: HumanizeRequest):
 
     def _clean_sentence(c: str) -> str:
         c = c.strip()
-        c = re.sub(r"([a-z])([A-Z][a-z])", r" ", c)
-        c = re.sub(r"(\w+)( )+", r"", c, count=2)
-        c = re.sub(r"([A-Z][a-z]{2,})([A-Z][a-z]{2,})", r" ", c)
-        c = re.sub(r"\s+([,.;:!?])", r"", c)
-        c = re.sub(r"([,.;:!?]){2,}", r"", c)
-        c = re.sub(r"[ 	]{2,}", " ", c)
+        c = re.sub(r"([a-z])([A-Z][a-z])", r"\1 \2", c)
+        c = re.sub(r"\b(\w+)( \1)+\b", r"\1", c, count=2, flags=re.I)
+        c = re.sub(r"\b([A-Z][a-z]{2,})([A-Z][a-z]{2,})\b", r"\1 \2", c)
+        c = re.sub(r"\s+([,.;:!?])", r"\1", c)
+        c = re.sub(r"([,.;:!?]){2,}", r"\1", c)
+        c = re.sub(r"[ \t]{2,}", " ", c)
         c = re.sub(r"^(?:and|but|so|also|moreover|furthermore)[, ]+", "", c, flags=re.I)
         if not re.search(r"[.!?]$", c):
             c = c.rstrip(",;:") + "."
@@ -355,31 +354,71 @@ async def humanize(req: HumanizeRequest):
         logger.exception("sentence-wise sampling failed")
         sentences, decs = _split_sentences(req.text), []
 
-    out_parts = []
-    for si, src_sentence in enumerate(sentences):
-        cands = [_clean_sentence(c) for c in decs[si * n_per:(si + 1) * n_per]]
-        def _degenerate(c: str) -> bool:
-            letters = sum(ch.isalpha() for ch in c)
-            if letters / max(1, len(c)) < 0.78:
-                return True
-            return any(sym in c for sym in ("+", "=", "#", "~", "^", "<", ">"))
-        cands = [c for c in cands if c and len(c.split()) >= 3 and not _degenerate(c)]
-        cands = [c for c in cands if not re.search(r"[a-z]{2}[A-Z][a-z]{2}", c)]
-        # drop candidates with split-word fragments ("Ar tic") — a short token
-        # that is neither a common word nor present in the source sentence
-        _SHORT_OK = {"a", "an", "in", "on", "it", "is", "be", "to", "of", "we",
-                     "he", "as", "at", "by", "or", "if", "do", "no", "so", "up",
-                     "us", "my", "me", "am", "tv"}
+    _SHORT_OK = {"a", "an", "in", "on", "it", "is", "be", "to", "of", "we",
+                 "he", "as", "at", "by", "or", "if", "do", "no", "so", "up",
+                 "us", "my", "me", "am", "tv"}
+
+    def _degenerate(c: str) -> bool:
+        letters = sum(ch.isalpha() for ch in c)
+        if letters / max(1, len(c)) < 0.78:
+            return True
+        return any(sym in c for sym in ("+", "=", "#", "~", "^", "<", ">"))
+
+    def _filter_cands(src_sentence: str, cands: list) -> list:
+        """Quality filters shared by both sampling passes."""
         src_tokens = {w.lower().strip(".,;:!?") for w in src_sentence.split()}
-        cands = [c for c in cands
-                 if not any(len(w) <= 3 and w.lower().strip(".,;:!?") not in _SHORT_OK
-                            and w.lower().strip(".,;:!?") not in src_tokens
-                            for w in c.split() if w.isalpha())]
-        # parens in the candidate when the source has none = garbled prefix
-        if "(" not in src_sentence:
-            cands = [c for c in cands if "(" not in c]
-        out_parts.append(_pick_sentence(src_sentence, cands))
-    out = " ".join(out_parts)
+        out = []
+        for c in cands:
+            if not c or len(c.split()) < 3 or _degenerate(c):
+                continue
+            if re.search(r"[a-z]{2}[A-Z][a-z]{2}", c):
+                continue
+            # split-word fragments ("Ar tic") — short token neither common
+            # nor present in the source sentence
+            if any(len(w) <= 3 and w.lower().strip(".,;:!?") not in _SHORT_OK
+                   and w.lower().strip(".,;:!?") not in src_tokens
+                   for w in c.split() if w.isalpha()):
+                continue
+            # parens in the candidate when the source has none = garbled prefix
+            if "(" not in src_sentence and "(" in c:
+                continue
+            out.append(c)
+        return out
+
+    picked_by_index: dict = {}
+    for si, src_sentence in enumerate(sentences):
+        cands = _filter_cands(src_sentence,
+                              [_clean_sentence(c) for c in decs[si * n_per:(si + 1) * n_per]])
+        picked_by_index[si] = _pick_sentence(src_sentence, cands)
+
+    # Targeted retry: hard sentences that fell back to the original get one
+    # hotter sampling round — more candidates, another chance at a safe rewrite.
+    retry_indices = [si for si, s in enumerate(sentences)
+                     if picked_by_index.get(si) == s]
+    if retry_indices and (time.perf_counter() - t0) < 32:
+        for si in retry_indices:
+            src_sentence = sentences[si]
+            enc_r = tokenizer([src_sentence], return_tensors="pt", truncation=True, max_length=256)
+            try:
+                with torch.no_grad():
+                    outputs_r = model.generate(
+                        **enc_r,
+                        max_length=192,
+                        do_sample=True,
+                        temperature=min(1.1, base_temp + 0.15),
+                        top_p=0.95,
+                        num_beams=1,
+                        no_repeat_ngram_size=3,
+                        num_return_sequences=8,
+                    )
+                r_cands = [_clean_sentence(c) for c in tokenizer.batch_decode(outputs_r, skip_special_tokens=True)]
+            except Exception:
+                continue
+            r_cands = _filter_cands(src_sentence, r_cands)
+            if r_cands:
+                picked_by_index[si] = _pick_sentence(src_sentence, r_cands)
+
+    out = " ".join(picked_by_index.get(si, s) for si, s in enumerate(sentences))
     used_model = f"bart:{SHORT_HUMANIZER_ID}+sent{n_per}{'x2' if det2_model is not None else ''}"
 
     # ===== Stage 2: Granite casual-voice restyle =====
