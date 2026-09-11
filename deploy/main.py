@@ -17,6 +17,7 @@ For long text no sub-1B model works — gemma3:4b is the only faithful option.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -51,8 +52,8 @@ OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "120"))
 # Auto-routing by input length:
 # - <=150 words: cive202 BART-large (sub-1B specialized humanizer, ~10s)
 # - >150 words: gemma3:4b via Ollama (only faithful option, 25-90s)
-LONG_MODEL = os.environ.get("OLLAMA_HUMANIZER_LONG", "gemma3:4b")
-SHORT_WORD_CAP = int(os.environ.get("HUMANIZER_SHORT_WORD_CAP", "150"))
+LONG_MODEL = os.environ.get("OLLAMA_HUMANIZER_LONG", "granite-4.2:3b")
+SHORT_WORD_CAP = int(os.environ.get("HUMANIZER_SHORT_WORD_CAP", "100"))
 
 HUMANIZE_SYSTEM_PROMPT = (
     "You are an AI text humanizer. Rewrite the user's text so it reads like a real person wrote it. "
@@ -189,6 +190,47 @@ async def humanize(req: HumanizeRequest):
     if not state:
         raise HTTPException(503, "models not loaded yet")
     t0 = time.perf_counter()
+
+    # ===== Long input (>SHORT_WORD_CAP words): Granite-4.2 direct =====
+    # Instruction-tuned, casual human voice, ~26-35s — fits the Vercel budget.
+    # The BART ensemble below handles the short path (its near-paraphrase
+    # output on long formal text is what detectors flag hardest).
+    if not _is_short(req.text):
+        try:
+            payload = {
+                "model": LONG_MODEL,
+                "stream": False,
+                "think": False,
+                "keep_alive": -1,
+                "messages": [
+                    {"role": "system", "content": HUMANIZE_SYSTEM_PROMPT},
+                    {"role": "user", "content": req.text},
+                ],
+                "options": {"temperature": max(0.7, min(1.0, req.temperature)),
+                            "top_p": 0.95, "num_predict": 700},
+            }
+            async with httpx.AsyncClient(timeout=45) as client:
+                r = None
+                for attempt in range(2):  # transient 404/5xx seen while ollama (re)loads a model
+                    r = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload,
+                                          headers={"Content-Type": "application/json"})
+                    if r.status_code == 200:
+                        break
+                    logger.error("OLLAMA_DEBUG status=%s body=%s url=%s", r.status_code, r.text[:200], f"{OLLAMA_BASE_URL}/api/chat")
+                    await asyncio.sleep(2)
+            out = r.json().get("message", {}).get("content", "").strip() if r is not None else ""
+            if not out:
+                raise ValueError("empty granite response")
+        except Exception:
+            logger.exception("granite long-path failed; returning input unchanged")
+            out = req.text
+        if len(out) >= 2 and out[0] == out[-1] and out[0] in ('"', "'", "`"):
+            out = out[1:-1].strip()
+        return HumanizeResponse(
+            humanized=out,
+            model=f"ollama:{LONG_MODEL}",
+            elapsed_ms=int((time.perf_counter() - t0) * 1000),
+        )
 
     # ===== Per-sentence humanization pipeline =====
     # Each input sentence is rewritten independently with best-of-N sampling;
@@ -351,6 +393,7 @@ async def humanize(req: HumanizeRequest):
                 "model": LONG_MODEL,
                 "stream": False,
                 "think": False,
+                "keep_alive": -1,
                 "messages": [
                     {"role": "system", "content": "Rewrite the text in a casual, natural human voice, like a student explaining to a friend. RULES: 1) Keep EVERY fact, number and point. 2) Keep the same sentence order. 3) Use simple words and contractions. 4) Output ONLY the rewritten text."},
                     {"role": "user", "content": out},
