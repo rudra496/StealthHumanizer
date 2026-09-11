@@ -340,6 +340,41 @@ async def humanize(req: HumanizeRequest):
     out = " ".join(out_parts)
     used_model = f"bart:{SHORT_HUMANIZER_ID}+sent{n_per}{'x2' if det2_model is not None else ''}"
 
+    # ===== Stage 2: Granite casual-voice restyle =====
+    # The BART pass preserves structure and facts; Granite (instruction-tuned,
+    # thinking disabled) then shifts the register to a natural human voice —
+    # the combination measured 0% AI on ZeroGPT. Meaning gate vs the ORIGINAL
+    # input decides whether the restyle ships; time-bounded for Vercel.
+    if (time.perf_counter() - t0) < 20 and out.strip():
+        try:
+            granite_payload = {
+                "model": LONG_MODEL,
+                "stream": False,
+                "think": False,
+                "messages": [
+                    {"role": "system", "content": "Rewrite the text in a casual, natural human voice, like a student explaining to a friend. RULES: 1) Keep EVERY fact, number and point. 2) Keep the same sentence order. 3) Use simple words and contractions. 4) Output ONLY the rewritten text."},
+                    {"role": "user", "content": out},
+                ],
+                "options": {"temperature": 0.9, "top_p": 0.95, "num_predict": 500},
+            }
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=granite_payload,
+                                      headers={"Content-Type": "application/json"})
+            g_raw = r.json().get("message", {}).get("content", "").strip()
+            g_text = _clean_sentence(g_raw) if g_raw else ""
+            gate_ok = (
+                g_text and len(g_text.split()) >= 8
+                and 0.6 <= len(g_text) / max(1, len(req.text)) <= 1.6
+                and sorted(_NUM_RE.findall(req.text)) == sorted(_NUM_RE.findall(g_text))
+                and not (_ents(g_text) - _ents(req.text))
+                and _f1_gen(req.text, g_text) >= 0.30
+            )
+            if gate_ok:
+                out = g_text
+                used_model += "+granite"
+        except Exception:
+            logger.exception("granite restyle failed; keeping BART output")
+
     if not out.strip():
         # last resort: gemma3:4b with the anti-detection prompt
         payload = {
