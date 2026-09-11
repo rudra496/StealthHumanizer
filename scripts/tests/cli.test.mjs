@@ -125,7 +125,7 @@ describe("StealthHumanizer CLI", () => {
     assertSuccess(result);
     assert.match(result.stdout, /Provider\s+Free\s+Env var\s+Default model\s+Name/);
     assert.match(result.stdout, /gemini\s+yes\s+GEMINI_API_KEY\s+gemini-2\.5-flash/);
-    assert.match(result.stdout, /openai\s+no\s+OPENAI_API_KEY\s+gpt-4o/);
+    assert.match(result.stdout, /openai\s+no\s+OPENAI_API_KEY\s+gpt-5-mini/);
     assert.match(result.stdout, /claude-code\s+yes\s+\(cli\)/);
     assert.match(result.stdout, /codex\s+yes\s+\(cli\)/);
     assert.equal(result.stderr, "");
