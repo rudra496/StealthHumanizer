@@ -128,10 +128,20 @@ _PRON = {"i", "me", "my", "mine", "myself", "we", "us", "our", "ours",
          "you", "your", "yours", "yourself", "yourselves", "folks"}
 
 
+def _pron_tokens(t: str) -> set:
+    """Pronoun bases, contraction-aware: we're→we, you'll→you, i'm→i."""
+    out = set()
+    for w in t.split():
+        base = w.strip(".,;:!?\"'").lower()
+        base = base.split("'")[0].strip()
+        if base in _PRON:
+            out.add(base)
+    return out
+
+
 def _added_pronouns(src: str, c: str) -> set:
     """Personal pronouns present in the candidate but not in the source."""
-    s = {w.strip(".,;:!'\"").lower() for w in src.split()}
-    return {w.strip(".,;:!'\"").lower() for w in c.split()} & _PRON - s
+    return _pron_tokens(c) - _pron_tokens(src)
 
 
 def _ents(t: str) -> set:
@@ -216,8 +226,6 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
 
     safe = [c for c in cands if _meaning_ok(text, c)]
     if not safe:
-        # Fallback tiers keep meaning first; among survivors prefer
-        # pronoun-clean candidates before pure F1 ranking.
         tier = [c for c in cands if _f1_vs(text, c) >= 0.25] or cands
         clean = [c for c in tier if not _added_pronouns(text, c)]
         pool = clean or tier
@@ -225,6 +233,28 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
         pool = safe
 
     out = min(pool, key=_ensemble_ai_prob) if pool else text
+
+    # Pronoun retry: if the winner still adds pronouns and budget remains,
+    # sample one more batch and re-rank the combined pool. If pronouns
+    # persist everywhere, ship the candidate with the FEWEST added.
+    if _added_pronouns(text, out) and (time.perf_counter() - t0) < 65:
+        extra = [asyncio.ensure_future(_one_gemma_sample(text, t))
+                 for t in (min(1.1, base_temp + 0.15), min(1.3, base_temp + 0.45))]
+        done2, _ = await asyncio.wait(extra, timeout=35)
+        for t2 in done2:
+            try:
+                p2 = t2.result()
+            except Exception:
+                continue
+            if p2:
+                c2 = _clean_candidate(p2)
+                if c2 and _meaning_ok(text, c2):
+                    pool.append(c2)
+        clean2 = [c for c in pool if not _added_pronouns(text, c)]
+        if clean2:
+            out = min(clean2, key=_ensemble_ai_prob)
+        else:
+            out = min(pool, key=lambda c: (len(_added_pronouns(text, c)), _ensemble_ai_prob(c)))
     out_ai_prob = _ensemble_ai_prob(out) if out else 1.0
     if len(out) >= 2 and out[0] == out[-1] and out[0] in ('"', "'", "`"):
         out = out[1:-1].strip()
