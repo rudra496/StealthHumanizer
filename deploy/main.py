@@ -56,8 +56,8 @@ HUMANIZE_SYSTEM_PROMPT = (
     "in the realm of, it is important to note, a testament to, underscores, vibrant, multifaceted, "
     "unprecedented, crucial, pivotal, fostering, leveraging.\n"
     "6. Use casual transitions where they fit (but, so, then, anyway).\n"
-    "7. Do NOT add personal pronouns (I, you, we, us, our) or fillers (you know, basically, honestly, folks, "
-    "well) unless the original text already has them.\n"
+    "7. Do NOT add second-person pronouns (you, your, you'll) or the filler 'you know' unless the "
+    "original text already has them. Mild spoken words (basically, 'messes up') are fine.\n"
     "8. Do NOT add new examples, opinions, analogies, or explanations that are not in the original.\n"
     "9. Output ONLY the rewritten text. No preamble. No explanation. No quotes around the output."
 )
@@ -69,12 +69,14 @@ class HumanizeRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=32000)
     temperature: float = Field(0.7, ge=0.1, le=2.0)
     num_beams: int = Field(4, ge=1, le=8)  # accepted for backwards compat, ignored by Ollama
+    samples: int = Field(2, ge=1, le=4)    # direct browser mode uses 4 (no Vercel clamp)
 
 
 class HumanizeResponse(BaseModel):
     humanized: str
     model: str
     elapsed_ms: int
+    ai_probability: float = 0.0
 
 
 class DetectRequest(BaseModel):
@@ -184,13 +186,15 @@ async def humanize(req: HumanizeRequest):
 
     try:
         base_temp = max(0.7, min(1.0, req.temperature))
-        tasks = [
-            asyncio.ensure_future(_one_sample(base_temp)),
-            asyncio.ensure_future(_one_sample(min(1.15, base_temp + 0.25))),
-        ]
-        # HARD BUDGET: wait at most 42s — Vercel Hobby kills functions at 60s.
-        # Ship whichever samples finished; cancel the stragglers.
-        done, pending = await asyncio.wait(tasks, timeout=42)
+        # Direct browser mode (samples=4) has no Vercel clamp: 80s budget and
+        # a wider temperature spread. Vercel-proxied requests keep 42s/2.
+        n_samples = min(4, max(1, req.samples))
+        budget = 80 if n_samples >= 4 else 42
+        temps = [base_temp, min(1.15, base_temp + 0.25), min(1.25, base_temp + 0.4),
+                 min(1.3, base_temp + 0.5)][:n_samples]
+        tasks = [asyncio.ensure_future(_one_sample(t)) for t in temps]
+        # HARD BUDGET: ship whichever samples finished in time; cancel stragglers.
+        done, pending = await asyncio.wait(tasks, timeout=budget)
         for t in pending:
             t.cancel()
         cands = []
@@ -291,6 +295,7 @@ async def humanize(req: HumanizeRequest):
 
     out = min(pool, key=_ai_prob) if pool else req.text
     used_model = f"ollama:{LONG_MODEL}+bo2{'x2' if det2_model is not None else ''}"
+    out_ai_prob = _ai_prob(out) if out else 1.0
 
     # Strip accidental surrounding quotes (some models wrap output).
     if len(out) >= 2 and out[0] == out[-1] and out[0] in ('"', "'", "`"):
@@ -300,6 +305,7 @@ async def humanize(req: HumanizeRequest):
         humanized=out,
         model=used_model,
         elapsed_ms=int((time.perf_counter() - t0) * 1000),
+        ai_probability=float(out_ai_prob),
     )
 
 

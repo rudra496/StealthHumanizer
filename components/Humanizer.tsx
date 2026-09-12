@@ -264,6 +264,68 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     setPipelineStep('Step 1: LLM Rewrite...');
     setProgress({ pass: 0, max: 2, message: 'Layer 1: LLM Rewrite...' });
 
+    // Rudra's Free Usage Model, DIRECT mode: the browser calls the Oracle VPS
+    // itself, skipping Vercel's 60s function clamp. That lets the server run
+    // best-of-4 samples (85s budget) ranked by its detector ensemble — the
+    // verified-0%-on-ZeroGPT configuration. Vercel function usage → ~0.
+    if (providerId === 'rudra-free') {
+      try {
+        const directBase = process.env.NEXT_PUBLIC_RUDRA_DIRECT_URL || 'https://129-159-229-170.sslip.io';
+        const resp = await fetch(`${directBase}/api/humanize/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: inputText, temperature: 0.85, samples: 4 }),
+        });
+        if (!resp.ok) throw new Error(`Humanizer HTTP ${resp.status}`);
+        const rd = await resp.json();
+        const fullText: string = rd.humanized || inputText;
+        const det = detectAI(fullText);
+        const sents = buildSentenceResults(inputText, fullText).map((row: any, i: number) => ({
+          original: row.original, humanized: row.humanized, alternatives: [] as string[],
+          index: i, detectionScore: det.sentences[i]?.score,
+        }));
+        const directResult: HumanizationResult = {
+          sentences: sents,
+          fullText,
+          model: 'rudra-free',
+          modelName: "Rudra's Free Usage Model",
+          wordCount: { input: countWords(inputText), output: countWords(fullText) },
+          timestamp: Date.now(),
+          passes: 1,
+          finalScore: det.score,
+          options: { style: style as any, language },
+          semanticFidelity: assessSemanticFidelity(inputText, fullText),
+          confidenceReport: { humanLikenessScore: det.score, confidence: Math.max(30, Math.min(95, det.score)), calibrationBand: 'medium' },
+          fallbackBehavior: { used: false, reason: 'not needed' },
+          observability: { latencyMs: rd.elapsed_ms || 0, estimatedCostUsd: 0, streamingAvailable: false, privacyMode: false },
+        } as any;
+        setResult(directResult);
+        saveHumanizationVersion(directResult);
+        setPipelineStep('');
+        setProgress({ pass: 1, max: 1, message: 'Done!' });
+        showToast(det.score >= 70 ? 'success' : 'info', `Score: ${det.score}% human`);
+        setLoading(false);
+        (async () => {
+          try {
+            setPostDetectLoading(true);
+            const r = await fetch(`${BASE_PATH}/api/detect`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: fullText }) });
+            const json = await r.json();
+            if (json?.success) {
+              const dd = json.data;
+              const aiP = typeof dd.aiProbability === 'number' ? dd.aiProbability : dd.score;
+              setPostDetect({ label: aiP >= 0.5 ? 'ai' : 'human', aiProbability: aiP, humanProbability: 1 - aiP, model: dd.model || 'rudra-ensemble', elapsedMs: dd.elapsed_ms || 0 });
+            }
+          } catch { /* non-blocking */ } finally { setPostDetectLoading(false); }
+        })();
+      } catch (err: any) {
+        showToast('error', err?.message || 'Direct humanization failed');
+        setLoading(false);
+        setPipelineStep('');
+        setProgress({ pass: 0, max: 0, message: '' });
+      }
+      return;
+    }
+
     try {
       // Get all available API keys
       const allApiKeys = Object.fromEntries(
