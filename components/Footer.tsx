@@ -66,6 +66,21 @@ export default function Footer() {
             <span className="flex items-center gap-1">&#x1f310; Privacy first</span>
             <span className="flex items-center gap-1">&#x26a1; Free forever</span>
           </div>
+          <a
+            href="https://websitelaunches.com/site/devhumanizer.tech"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block shrink-0 opacity-90 hover:opacity-100 transition-opacity"
+            title="Verified public launch record on Website Launches"
+          >
+            <img
+              src="https://websitelaunches.com/badge/devhumanizer.tech.svg"
+              alt="Established online - Public launch record"
+              width={255}
+              height={55}
+              loading="lazy"
+            />
+          </a>
         </div>
       </div>
     </footer>
