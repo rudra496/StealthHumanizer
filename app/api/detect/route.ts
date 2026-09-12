@@ -47,7 +47,13 @@ export async function POST(request: NextRequest) {
       try {
         const r = await detectWithRudra(text);
         const structuralHuman = detectAI(text).score; // 0-100
-        const calibrated = 1 - structuralHuman / 100;
+        let calibrated = 1 - structuralHuman / 100;
+        // Open RoBERTa detectors over-flag polished text, BUT a saturated
+        // consensus (>= 0.90) from both is a strong true-AI signal — trust
+        // it as an override so raw AI input is still flagged.
+        if (r.aiProbability >= 0.9) {
+          calibrated = Math.max(calibrated, 0.86);
+        }
         const label = calibrated >= 0.5 ? 'ai' : 'human';
         return NextResponse.json({
           success: true,
