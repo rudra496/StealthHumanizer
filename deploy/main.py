@@ -129,9 +129,10 @@ _PRON = {"i", "me", "my", "mine", "myself", "we", "us", "our", "ours",
 
 
 def _pron_tokens(t: str) -> set:
-    """Pronoun bases, contraction-aware: we're→we, you'll→you, i'm→i."""
+    """Pronoun bases, contraction- and unicode-apostrophe-aware:
+    we're→we, you'll→you, i'm→i, we\u2019re→we."""
     out = set()
-    for w in t.split():
+    for w in t.replace("\u2019", "'").replace("\u2018", "'").split():
         base = w.strip(".,;:!?\"'").lower()
         base = base.split("'")[0].strip()
         if base in _PRON:
@@ -234,27 +235,36 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
 
     out = min(pool, key=_ensemble_ai_prob) if pool else text
 
-    # Pronoun retry: if the winner still adds pronouns and budget remains,
-    # sample one more batch and re-rank the combined pool. If pronouns
-    # persist everywhere, ship the candidate with the FEWEST added.
-    if _added_pronouns(text, out) and (time.perf_counter() - t0) < 65:
-        extra = [asyncio.ensure_future(_one_gemma_sample(text, t))
-                 for t in (min(1.1, base_temp + 0.15), min(1.3, base_temp + 0.45))]
-        done2, _ = await asyncio.wait(extra, timeout=35)
-        for t2 in done2:
-            try:
-                p2 = t2.result()
-            except Exception:
+    # Pronoun surgical pass: rewrite only the sentences that add pronouns.
+    # (Full-text re-sampling was dropped — gemma consistently reintroduces
+    # pronouns on some topics, and the extra 35s batch burned the budget.)
+    if _added_pronouns(text, out) and (time.perf_counter() - t0) < 80:
+        sents = re.split(r"(?<=[.!?])\s+", out)
+        src_sents = re.split(r"(?<=[.!?])\s+", text)
+        fixed = []
+        for s in sents:
+            if not _added_pronouns(text, s):
+                fixed.append(s)
                 continue
-            if p2:
-                c2 = _clean_candidate(p2)
-                if c2 and _meaning_ok(text, c2):
-                    pool.append(c2)
-        clean2 = [c for c in pool if not _added_pronouns(text, c)]
-        if clean2:
-            out = min(clean2, key=_ensemble_ai_prob)
-        else:
-            out = min(pool, key=lambda c: (len(_added_pronouns(text, c)), _ensemble_ai_prob(c)))
+            new_s = ""
+            try:
+                r = await _one_gemma_sample(
+                    s + "\n(Rewrite this one sentence with NO personal pronouns — no I, we, you, us, our, your. Keep the same meaning and similar length.)",
+                    0.6)
+            except Exception:
+                r = ""
+            cand = _clean_candidate(r) if r else ""
+            if cand and not _added_pronouns(text, cand) and _f1_vs(s, cand) >= 0.35:
+                new_s = cand
+            else:
+                # floor: substitute the best-matching ORIGINAL sentence —
+                # the source is pronoun-clean by definition.
+                best = max(src_sents, key=lambda ss: _f1_vs(ss, s), default=s)
+                new_s = best if best.strip() else s
+            fixed.append(new_s)
+        candidate = " ".join(fixed)
+        if not _added_pronouns(text, candidate):
+            out = candidate
     out_ai_prob = _ensemble_ai_prob(out) if out else 1.0
     if len(out) >= 2 and out[0] == out[-1] and out[0] in ('"', "'", "`"):
         out = out[1:-1].strip()
