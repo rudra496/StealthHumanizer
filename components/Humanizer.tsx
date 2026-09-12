@@ -266,18 +266,33 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
 
     // Rudra's Free Usage Model, DIRECT mode: the browser calls the Oracle VPS
     // itself, skipping Vercel's 60s function clamp. That lets the server run
-    // best-of-4 samples (85s budget) ranked by its detector ensemble — the
-    // verified-0%-on-ZeroGPT configuration. Vercel function usage → ~0.
+    // best-of-4 samples (100s budget) ranked by its detector ensemble — the
+    // verified-0%-on-ZeroGPT configuration. Runs as a background job on the
+    // VPS; this UI polls the same-origin shuttle route so every hop is a fast
+    // call (no Vercel 60s clamp, no cross-origin host in the browser).
     if (providerId === 'rudra-free') {
       try {
-        const directBase = process.env.NEXT_PUBLIC_RUDRA_DIRECT_URL || 'https://129-159-229-170.sslip.io';
-        const resp = await fetch(`${directBase}/api/humanize/`, {
+        setPipelineStep('Starting humanization job…');
+        const startResp = await fetch(`${BASE_PATH}/api/humanize-job`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: inputText, temperature: 0.85, samples: 4 }),
+          body: JSON.stringify({ text: inputText, temperature: 0.85 }),
         });
-        if (!resp.ok) throw new Error(`Humanizer HTTP ${resp.status}`);
-        const rd = await resp.json();
+        const startData = await startResp.json().catch(() => ({}));
+        if (!startResp.ok || !startData?.id) throw new Error(startData?.error || `Job start failed (HTTP ${startResp.status})`);
+        const jobId: string = startData.id;
+
+        let rd: any = null;
+        const deadline = Date.now() + 140_000;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 4000));
+          setPipelineStep('Humanizing (best-of-4 sampling)…');
+          const stResp = await fetch(`${BASE_PATH}/api/humanize-job?id=${jobId}`);
+          const stData = await stResp.json().catch(() => ({}));
+          if (stData?.status === 'done') { rd = stData; break; }
+          if (stData?.status === 'error') throw new Error(stData?.error || 'Humanization failed');
+        }
+        if (!rd) throw new Error('Humanization timed out — please try again');
         const fullText: string = rd.humanized || inputText;
         const det = detectAI(fullText);
         const sents = buildSentenceResults(inputText, fullText).map((row: any, i: number) => ({
