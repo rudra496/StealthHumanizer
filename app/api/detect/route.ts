@@ -36,17 +36,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Prefer the maintainer's hosted detector (free, no key needed from the
-    // user) — calibrated with the structural heuristic. Open RoBERTa
-    // detectors saturate ~0.99 on ANY polished text (they flag good casual
-    // rewrites at 0.6-0.9 while ZeroGPT scores the same text 0%), so the
-    // panel blends the ensemble with the 12-metric structural heuristic
-    // (burstiness, AI-phrase density, sentence variety), which tracks
-    // commercial detectors far better. Weights: 35% ensemble / 65% heuristic.
+    // user). Open RoBERTa detectors saturate ~0.99 on ANY polished text —
+    // they flag good casual rewrites at 0.6-0.9 while ZeroGPT scores the
+    // same text 0% — so their raw probability is misleading as a headline.
+    // The panel therefore reports the structural analysis (12-metric:
+    // burstiness, AI-phrase density, sentence variety — the same family of
+    // signals commercial detectors use), with the RoBERTa ensemble kept as
+    // a secondary reference value.
     if (isRudraDetectorConfigured()) {
       try {
         const r = await detectWithRudra(text);
-        const heuristic = detectAI(text); // score: 0-100 (human %)
-        const calibrated = 0.35 * r.aiProbability + 0.65 * (1 - heuristic.score / 100);
+        const structuralHuman = detectAI(text).score; // 0-100
+        const calibrated = 1 - structuralHuman / 100;
         const label = calibrated >= 0.5 ? 'ai' : 'human';
         return NextResponse.json({
           success: true,
@@ -58,7 +59,8 @@ export async function POST(request: NextRequest) {
             label,
             sentences: [],
             source: 'rudra' as const,
-            model: `calibrated(${r.model.split('+')[0]} + structural)`,
+            model: 'structural-12metric',
+            ensembleReference: Math.round(r.aiProbability * 100) / 100,
             elapsedMs: r.elapsedMs,
           },
         });
