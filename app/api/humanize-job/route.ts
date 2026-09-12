@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         text: text.slice(0, 32000),
         temperature: typeof body.temperature === 'number' ? body.temperature : 0.85,
-        samples: 4,
+        samples: 3,
       }),
     });
     const data = await upstream.json().catch(() => ({}));

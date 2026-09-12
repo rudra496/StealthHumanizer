@@ -283,7 +283,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         const jobId: string = startData.id;
 
         let rd: any = null;
-        const deadline = Date.now() + 140_000;
+        const deadline = Date.now() + 200_000;
         while (Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, 4000));
           setPipelineStep('Humanizing (best-of-4 sampling)…');

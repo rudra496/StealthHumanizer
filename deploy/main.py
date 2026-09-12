@@ -238,7 +238,7 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
     # Pronoun surgical pass: rewrite only the sentences that add pronouns.
     # (Full-text re-sampling was dropped — gemma consistently reintroduces
     # pronouns on some topics, and the extra 35s batch burned the budget.)
-    if _added_pronouns(text, out) and (time.perf_counter() - t0) < 80:
+    if _added_pronouns(text, out) and (time.perf_counter() - t0) < 130:
         sents = re.split(r"(?<=[.!?])\s+", out)
         src_sents = re.split(r"(?<=[.!?])\s+", text)
         fixed = []
@@ -317,7 +317,7 @@ class HumanizeResponse(BaseModel):
 class JobStartRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=32000)
     temperature: float = Field(0.85, ge=0.1, le=2.0)
-    samples: int = Field(4, ge=1, le=4)
+    samples: int = Field(3, ge=1, le=4)  # 3 keeps the batch ~75s, leaving budget for the pronoun surgical pass
 
 
 class DetectRequest(BaseModel):
