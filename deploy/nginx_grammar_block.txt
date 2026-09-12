@@ -1,0 +1,11 @@
+    location /api/grammar/ {
+        if ($auth_humanizer = 0) { return 401; }
+        auth_basic off;
+        limit_req zone=apilimit burst=30 nodelay;
+        proxy_pass http://stealth-models:8000/grammar/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 180s;
+    }

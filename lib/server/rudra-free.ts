@@ -92,6 +92,53 @@ export async function humanizeWithRudra(text: string): Promise<RudraHumanizeResu
   }
 }
 
+export interface RudraGrammarResult {
+  corrected: string;
+  model: string;
+  elapsedMs: number;
+}
+
+export async function grammarCheckWithRudra(text: string): Promise<RudraGrammarResult> {
+  const key = getHumanizerKey();
+  if (!key) {
+    throw new Error('Rudra Free model is not configured on the server (RUDRA_HUMANIZER_API_KEY missing).');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), HUMANIZE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${getBaseUrl()}/api/grammar/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({ text }),
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`Upstream Rudra grammar returned ${response.status}: ${errBody.slice(0, 200)}`);
+    }
+
+    const data = await response.json();
+    if (!data?.corrected || typeof data.corrected !== 'string') {
+      throw new Error('Malformed response from Rudra grammar');
+    }
+
+    return {
+      corrected: data.corrected,
+      model: data.model || 'gemma3:4b',
+      elapsedMs: Number(data.elapsed_ms) || 0,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface RudraDetectResult {
   label: 'human' | 'ai';
   aiProbability: number;     // 0..1

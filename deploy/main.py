@@ -303,39 +303,108 @@ async def humanize(req: HumanizeRequest):
     )
 
 
-@app.post("/detect/", response_model=DetectResponse)
-async def detect(req: DetectRequest):
+GRAMMAR_SYSTEM_PROMPT = (
+    "You are a grammar and spelling checker. Fix ONLY grammar, spelling, and punctuation errors "
+    "in the user's text. RULES:\n"
+    "1. Do NOT change the wording, style, or sentence structure beyond the error fixes.\n"
+    "2. Preserve ALL meaning, facts, names, numbers, and citations exactly.\n"
+    "3. Keep the same length and the same sentences.\n"
+    "4. Output ONLY the corrected text. No preamble. No explanation. No quotes."
+)
+
+
+class GrammarRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=32000)
+
+
+class GrammarResponse(BaseModel):
+    corrected: str
+    model: str
+    elapsed_ms: int
+
+
+@app.post("/grammar/", response_model=GrammarResponse)
+async def grammar(req: GrammarRequest):
+    """LLM grammar fix for the free-model path (gemma3:4b, anti-echo prompt)."""
     if not state:
         raise HTTPException(503, "models not loaded yet")
-    tokenizer = state["detector_tokenizer"]
-    model = state["detector_model"]
     t0 = time.perf_counter()
-    inputs = tokenizer(
-        req.text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=512,
-        padding=True,
+    try:
+        payload = {
+            "model": LONG_MODEL,
+            "stream": False,
+            "keep_alive": -1,
+            "messages": [
+                {"role": "system", "content": GRAMMAR_SYSTEM_PROMPT},
+                {"role": "user", "content": req.text},
+            ],
+            "options": {"temperature": 0.3, "top_p": 0.95,
+                        "num_predict": max(700, len(req.text) // 2)},
+        }
+        async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
+            r = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload,
+                                  headers={"Content-Type": "application/json"})
+        out = r.json().get("message", {}).get("content", "").strip() if r.status_code == 200 else ""
+        if not out or len(out) < len(req.text) // 3:
+            raise ValueError("empty or truncated grammar response")
+    except Exception:
+        logger.exception("grammar fix failed")
+        raise HTTPException(502, "grammar model unavailable")
+    if len(out) >= 2 and out[0] == out[-1] and out[0] in ('"', "'", "`"):
+        out = out[1:-1].strip()
+    return GrammarResponse(
+        corrected=out,
+        model=f"ollama:{LONG_MODEL}",
+        elapsed_ms=int((time.perf_counter() - t0) * 1000),
     )
-    with torch.no_grad():
-        logits = model(**inputs).logits
-    probs = torch.softmax(logits, dim=-1)[0].tolist()
-    id2label = model.config.id2label
-    label_to_prob = {id2label[i].lower(): probs[i] for i in range(len(probs))}
 
-    # Normalize label naming conventions across detectors.
+
+def _detector_probs(tok_, mdl_, text: str) -> tuple:
+    """Returns (ai_p, human_p) normalized across detector label conventions."""
+    inputs = tok_(text, return_tensors="pt", truncation=True, max_length=512, padding=True)
+    with torch.no_grad():
+        logits = mdl_(**inputs).logits
+    probs = torch.softmax(logits, dim=-1)[0].tolist()
+    id2label = mdl_.config.id2label
+    label_to_prob = {id2label[i].lower(): probs[i] for i in range(len(probs))}
     human_aliases = ("human", "real", "label_0", "0")
     ai_aliases = ("ai", "ai-generated", "chatgpt", "fake", "label_1", "1")
     human_p = max((label_to_prob.get(a, 0.0) for a in human_aliases), default=0.0)
     ai_p = max((label_to_prob.get(a, 0.0) for a in ai_aliases), default=0.0)
     if human_p + ai_p <= 0:
         human_p = label_to_prob.get(id2label[0].lower(), 0.0)
-        ai_p = label_to_prob.get(id2label[-1].lower(), 1.0 - human_p)
+        ai_p = 1.0 - human_p
+    return ai_p, human_p
+
+
+@app.post("/detect/", response_model=DetectResponse)
+async def detect(req: DetectRequest):
+    if not state:
+        raise HTTPException(503, "models not loaded yet")
+    t0 = time.perf_counter()
+
+    # Two-detector ensemble: a single roberta checkpoint scores ANY polished
+    # text ~99% AI (it flagged gemma's casual rewrites 99.9%). The mean of two
+    # independently-trained detectors is the honest verdict.
+    det_tok = state["detector_tokenizer"]
+    det_model = state["detector_model"]
+    det2_tok = state.get("detector2_tokenizer")
+    det2_model = state.get("detector2_model")
+    ai1, human1 = _detector_probs(det_tok, det_model, req.text)
+    if det2_model is not None:
+        ai2, human2 = _detector_probs(det2_tok, det2_model, req.text)
+        ai_p = (ai1 + ai2) / 2.0
+        human_p = (human1 + human2) / 2.0
+        used = f"ensemble:{DETECTOR_MODEL_ID}+{ENSEMBLE_DETECTOR_ID}"
+    else:
+        ai_p, human_p = ai1, human1
+        used = DETECTOR_MODEL_ID
+
     label = "ai" if ai_p >= human_p else "human"
     return DetectResponse(
         label=label,
         ai_probability=float(ai_p),
         human_probability=float(human_p),
-        model=DETECTOR_MODEL_ID,
+        model=used,
         elapsed_ms=int((time.perf_counter() - t0) * 1000),
     )

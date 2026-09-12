@@ -3,6 +3,7 @@ import { getProvider, isCliOnlyProvider } from '@/lib/providers';
 import { generateWithProvider } from '@/lib/server/providers-runtime';
 import { GRAMMAR_CHECK_SYSTEM_PROMPT } from '@/lib/prompts';
 import { checkGrammarLocally, normalizeGrammarPayload, parseFirstJsonObject } from '@/lib/grammar';
+import { grammarCheckWithRudra, isRudraHumanizerConfigured } from '@/lib/server/rudra-free';
 import { ModelProvider } from '@/lib/types';
 import { checkRateLimit } from '@/lib/rate-limit';
 
@@ -32,13 +33,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Text exceeds 50,000 character limit' }, { status: 400 });
     }
 
-    if (!model || !apiKey) {
+    if (!model || (!apiKey && model !== 'rudra-free')) {
       const local = checkGrammarLocally(text);
       return NextResponse.json({ success: true, ...local, warning: 'No model/API key supplied; used the local grammar fallback.' });
     }
 
     if (isCliOnlyProvider(model as ModelProvider)) {
       return NextResponse.json({ success: false, error: `Provider "${model}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
+    }
+
+    // Rudra's Free Usage Model: run the hosted gemma grammar fixer on the VPS
+    // (no provider API key needed), falling back to the local checker.
+    if (model === 'rudra-free') {
+      if (!isRudraHumanizerConfigured()) {
+        const local = checkGrammarLocally(text);
+        return NextResponse.json({ success: true, ...local, warning: 'Rudra Free model is not configured on the server; used the local grammar fallback.' });
+      }
+      try {
+        const rudra = await grammarCheckWithRudra(text);
+        const parsed = normalizeGrammarPayload(null, rudra.corrected, 'llm');
+        // The LLM returns the full corrected text, not an issue list — present
+        // it as a single phrasing fix so the UI has something to show.
+        const correctedText = parsed?.correctedText || rudra.corrected;
+        const issues = correctedText.trim() !== text.trim()
+          ? [{ type: 'phrasing' as const, original: text.slice(0, 120), suggestion: correctedText.slice(0, 120) + (correctedText.length > 120 ? '…' : ''), explanation: `Grammar-corrected by ${rudra.model}.` }]
+          : [];
+        return NextResponse.json({ success: true, issues, correctedText, source: 'llm' });
+      } catch (err: unknown) {
+        const local = checkGrammarLocally(text);
+        return NextResponse.json({
+          success: true,
+          ...local,
+          warning: err instanceof Error ? `Rudra grammar check failed; used local fallback. ${err.message}` : 'Rudra grammar check failed; used local fallback.',
+        });
+      }
     }
 
     try {

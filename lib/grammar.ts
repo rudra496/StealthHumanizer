@@ -30,7 +30,8 @@ const LOCAL_RULES: Array<{
   { type: 'phrasing', pattern: /\bin order to\b/gi, replacement: 'to', explanation: 'Removes wordy phrasing.' },
   { type: 'phrasing', pattern: /\bdue to the fact that\b/gi, replacement: 'because', explanation: 'Replaces wordy phrasing with a clearer word.' },
   { type: 'punctuation', pattern: /\s+([,.;:!?])/g, replacement: '$1', explanation: 'Removes spaces before punctuation.' },
-  { type: 'punctuation', pattern: /([,.;:!?])([^\s”’"')\]}])/g, replacement: '$1 $2', explanation: 'Adds a missing space after punctuation.' },
+  // Skips digit,punct,digit so thousands separators like "147,570" are never "corrected".
+  { type: 'punctuation', pattern: /([,.;:!?])(?!\d)([^\s\d”’"')\]}])/g, replacement: '$1 $2', explanation: 'Adds a missing space after punctuation.' },
   { type: 'punctuation', pattern: /\s{2,}/g, replacement: ' ', explanation: 'Collapses repeated spaces.' },
 ];
 
