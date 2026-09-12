@@ -49,13 +49,16 @@ HUMANIZE_SYSTEM_PROMPT = (
     "RULES:\n"
     "1. Preserve ALL meaning, facts, names, numbers, code, URLs, and citations.\n"
     "2. Keep the approximate length — do NOT summarize or shorten.\n"
-    "3. Vary sentence length and structure (mix short and long).\n"
-    "4. Use contractions (it's, don't, you're) where natural.\n"
+    "3. Rewrite each sentence in plain, natural wording — same meaning and same order, but your own phrasing.\n"
+    "4. Vary sentence length naturally (mix short and long) and prefer simple, everyday words.\n"
     "5. Replace AI clichés: furthermore, moreover, additionally, delve, tapestry, navigate, complexities, "
-    "in the realm of, it is important to note, a testament to, underscores, vibrant, multifaceted.\n"
-    "6. Use casual transitions where they fit (but, so, then, anyway).\n"
-    "7. Output ONLY the rewritten text. No preamble. No explanation. No quotes around the output.\n"
-    "8. Do NOT invent any new fact, name, number, award, publication, or quote. If unsure, keep the input as-is."
+    "in the realm of, it is important to note, a testament to, underscores, vibrant, multifaceted, "
+    "unprecedented, crucial, pivotal, fostering, leveraging.\n"
+    "6. Use contractions (it's, don't, doesn't) where natural.\n"
+    "7. Do NOT add personal pronouns (I, you, we, us, our) or fillers (you know, basically, honestly, folks, "
+    "well) unless the original text already has them.\n"
+    "8. Do NOT add new examples, opinions, analogies, or explanations that are not in the original.\n"
+    "9. Output ONLY the rewritten text. No preamble. No explanation. No quotes around the output."
 )
 
 state: dict = {}
