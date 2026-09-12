@@ -313,7 +313,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
             if (json?.success) {
               const dd = json.data;
               const aiP = typeof dd.aiProbability === 'number' ? dd.aiProbability : dd.score;
-              setPostDetect({ label: aiP >= 0.5 ? 'ai' : 'human', aiProbability: aiP, humanProbability: 1 - aiP, model: dd.model || 'rudra-ensemble', elapsedMs: dd.elapsed_ms || 0 });
+              setPostDetect({ label: aiP >= 0.5 ? 'ai' : 'human', aiProbability: aiP, humanProbability: 1 - aiP, model: dd.model || 'rudra-ensemble', elapsedMs: dd.elapsed_ms || 0, source: 'rudra' });
             }
           } catch { /* non-blocking */ } finally { setPostDetectLoading(false); }
         })();
