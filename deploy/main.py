@@ -57,8 +57,9 @@ HUMANIZE_SYSTEM_PROMPT = (
     "in the realm of, it is important to note, a testament to, underscores, vibrant, multifaceted, "
     "unprecedented, crucial, pivotal, fostering, leveraging.\n"
     "6. Use casual transitions where they fit (but, so, then, anyway).\n"
-    "7. Do NOT add second-person pronouns (you, your, you'll) or the filler 'you know' unless the "
-    "original text already has them. Mild spoken words (basically, 'messes up') are fine.\n"
+    "7. Do NOT add personal pronouns or fillers that are not in the original: I, me, my, we, us, our, "
+    "you, your, you'll, 'you know', folks. Mild spoken words (basically, really) are fine. Write about "
+    "the subject, not the reader or writer.\n"
     "8. Output ONLY the rewritten text. No preamble. No explanation. No quotes around the output."
 )
 
@@ -123,6 +124,14 @@ _ENT_STOP = {"the", "this", "that", "these", "those", "it", "in", "on",
              "thus", "hence", "also", "such", "some", "any", "sometimes"}
 _NEG = ("not", "no", "never", "cannot", "can't", "don't", "doesn't", "didn't",
         "won't", "isn't", "aren't", "wasn't", "weren't", "without", "nor")
+_PRON = {"i", "me", "my", "mine", "myself", "we", "us", "our", "ours",
+         "you", "your", "yours", "yourself", "yourselves", "folks"}
+
+
+def _added_pronouns(src: str, c: str) -> set:
+    """Personal pronouns present in the candidate but not in the source."""
+    s = {w.strip(".,;:!'\"").lower() for w in src.split()}
+    return {w.strip(".,;:!'\"").lower() for w in c.split()} & _PRON - s
 
 
 def _ents(t: str) -> set:
@@ -152,6 +161,8 @@ def _meaning_ok(src: str, c: str) -> bool:
     if _ents(c) - _ents(src):
         return False
     if abs(_neg_count(c) - _neg_count(src)) > 1:
+        return False
+    if _added_pronouns(src, c):
         return False
     return _f1_vs(src, c) >= 0.30
 
@@ -204,7 +215,14 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
         cands = cands[:1]
 
     safe = [c for c in cands if _meaning_ok(text, c)]
-    pool = safe or [c for c in cands if _f1_vs(text, c) >= 0.25] or cands
+    if not safe:
+        # Fallback tiers keep meaning first; among survivors prefer
+        # pronoun-clean candidates before pure F1 ranking.
+        tier = [c for c in cands if _f1_vs(text, c) >= 0.25] or cands
+        clean = [c for c in tier if not _added_pronouns(text, c)]
+        pool = clean or tier
+    else:
+        pool = safe
 
     out = min(pool, key=_ensemble_ai_prob) if pool else text
     out_ai_prob = _ensemble_ai_prob(out) if out else 1.0

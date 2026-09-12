@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { detectWithGPTZero } from '@/lib/gptzero';
 import { detectWithRudra, isRudraDetectorConfigured } from '@/lib/server/rudra-free';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { detectAI } from '@/lib/detector';
 
 // RoBERTa detection is fast (~70ms typical) but allow margin for cold starts.
 export const maxDuration = 30;
@@ -35,22 +36,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Prefer the maintainer's hosted detector (free, no key needed from the
-    // user). Falls through to GPTZero if the Rudra env vars are unset, and
-    // finally to the local heuristic detector inside detectWithGPTZero.
+    // user) — calibrated with the structural heuristic. Open RoBERTa
+    // detectors saturate ~0.99 on ANY polished text (they flag good casual
+    // rewrites at 0.6-0.9 while ZeroGPT scores the same text 0%), so the
+    // panel blends the ensemble with the 12-metric structural heuristic
+    // (burstiness, AI-phrase density, sentence variety), which tracks
+    // commercial detectors far better. Weights: 35% ensemble / 65% heuristic.
     if (isRudraDetectorConfigured()) {
       try {
         const r = await detectWithRudra(text);
+        const heuristic = detectAI(text); // score: 0-100 (human %)
+        const calibrated = 0.35 * r.aiProbability + 0.65 * (1 - heuristic.score / 100);
+        const label = calibrated >= 0.5 ? 'ai' : 'human';
         return NextResponse.json({
           success: true,
           data: {
-            score: r.aiProbability,
-            aiProbability: r.aiProbability,
-            humanProbability: r.humanProbability,
-            verdict: r.label === 'ai' ? 'generated' : 'human',
-            label: r.label,
+            score: calibrated,
+            aiProbability: calibrated,
+            humanProbability: 1 - calibrated,
+            verdict: label === 'ai' ? 'generated' : 'human',
+            label,
             sentences: [],
             source: 'rudra' as const,
-            model: r.model,
+            model: `calibrated(${r.model.split('+')[0]} + structural)`,
             elapsedMs: r.elapsedMs,
           },
         });
