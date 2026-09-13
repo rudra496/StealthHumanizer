@@ -299,7 +299,19 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
     # Pronoun surgical pass: rewrite only the sentences that add pronouns.
     # The floor NEVER pastes raw source sentences back — verbatim AI phrases
     # in the "humanized" text are the #1 reason detectors flag the output.
-    if _added_pronouns(text, out) and (time.perf_counter() - t0) < 160:
+    if _added_pronouns(text, out):
+        # First: one full-text resample with the instruction INLINE — gemma
+        # obeys in-request constraints far better than post-hoc rewrites.
+        try:
+            inline = await _one_gemma_sample(
+                text + "\n\n[Write the casual humanized version of the above. ABSOLUTE RULE: never use the words I, we, you, us, our, your, me, my — write about the subject only.]",
+                0.85)
+            icand = _clean_candidate(inline) if inline else ""
+            if icand and not _added_pronouns(text, icand) and _meaning_ok(text, icand):
+                out = icand
+        except Exception:
+            logger.exception("inline anti-pronoun resample failed")
+    if _added_pronouns(text, out) and (time.perf_counter() - t0) < 170:
         sents = re.split(r"(?<=[.!?])\s+", out)
         fixed = []
         for s in sents:
@@ -308,7 +320,7 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
                 continue
             new_s = ""
             for temp in (0.6, 0.9, 1.1):  # retry until pronoun-free
-                if (time.perf_counter() - t0) > 170:
+                if (time.perf_counter() - t0) > 225:
                     break
                 try:
                     r = await _one_gemma_sample(
@@ -323,8 +335,6 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
                     new_s = cand
                     break
             if not new_s:
-                # last resort: strip pronouns textually keeps grammar mostly intact
-                # for the few patterns that occur ("we're facing X" -> "X is happening")
                 new_s = s
             fixed.append(new_s)
         candidate = " ".join(fixed)
