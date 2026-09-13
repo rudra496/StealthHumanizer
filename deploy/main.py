@@ -42,7 +42,8 @@ OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "150"))
 LONG_MODEL = os.environ.get("OLLAMA_HUMANIZER_LONG", "gemma3:4b")
 
 # Job lifecycle: hard cap sampling well inside the frontend's poll window.
-JOB_BUDGET_S = 100
+JOB_BUDGET_S = 130
+OLLAMA_SEMAPHORE = asyncio.Semaphore(3)  # cap concurrent gemma calls box-wide
 JOB_TTL_S = 900          # finished jobs pruned after 15 min
 MAX_RUNNING_JOBS = 2     # protect the free ARM box
 
@@ -90,15 +91,16 @@ async def _one_gemma_sample(text: str, temp: float) -> str:
         "options": {"temperature": temp, "top_p": 0.95,
                     "num_predict": max(700, len(text) // 2)},
     }
-    async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
-        r = None
-        for attempt in range(2):
-            r = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload,
-                                  headers={"Content-Type": "application/json"})
-            if r.status_code == 200:
-                break
-            logger.error("OLLAMA_DEBUG status=%s body=%s", r.status_code, r.text[:200])
-            await asyncio.sleep(2)
+    async with OLLAMA_SEMAPHORE:
+        async with httpx.AsyncClient(timeout=OLLAMA_TIMEOUT) as client:
+            r = None
+            for attempt in range(2):
+                r = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload,
+                                      headers={"Content-Type": "application/json"})
+                if r.status_code == 200:
+                    break
+                logger.error("OLLAMA_DEBUG status=%s body=%s", r.status_code, r.text[:200])
+                await asyncio.sleep(2)
     return r.json().get("message", {}).get("content", "").strip() if r is not None else ""
 
 
