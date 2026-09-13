@@ -44,7 +44,7 @@ LONG_MODEL = os.environ.get("OLLAMA_HUMANIZER_LONG", "gemma3:4b")
 # Job lifecycle: hard cap sampling well inside the frontend's poll window.
 JOB_BUDGET_S = 100
 JOB_TTL_S = 900          # finished jobs pruned after 15 min
-MAX_RUNNING_JOBS = 3     # protect the free ARM box
+MAX_RUNNING_JOBS = 2     # protect the free ARM box
 
 HUMANIZE_SYSTEM_PROMPT = (
     "You are an AI text humanizer. Rewrite the user's text so it reads like a real person wrote it. "
@@ -205,6 +205,31 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
              min(1.25, base_temp + 0.4), min(1.3, base_temp + 0.5)][:n]
 
     tasks = [asyncio.ensure_future(_one_gemma_sample(text, t)) for t in temps]
+
+    # v6 BART candidate (CPU, ~5-15s): self-trained on pronoun-free casual
+    # technical pairs — adds style diversity to the ranking pool.
+    bart_tok = state.get("bart_tokenizer")
+    bart_mdl = state.get("bart_model")
+
+    def _bart_candidates() -> list:
+        if bart_mdl is None:
+            return []
+        outs = []
+        try:
+            enc = bart_tok(text, return_tensors="pt", truncation=True, max_length=512)
+            with torch.no_grad():
+                gen = bart_mdl.generate(**enc, max_length=700, num_beams=4,
+                                        no_repeat_ngram_size=3, early_stopping=True)
+            outs.append(bart_tok.decode(gen[0], skip_special_tokens=True).strip())
+        except Exception:
+            logger.exception("BART candidate generation failed")
+        return [o for o in outs if o]
+
+    if bart_mdl is not None:
+        bart_task = asyncio.ensure_future(asyncio.to_thread(_bart_candidates))
+    else:
+        bart_task = None
+
     done, pending = await asyncio.wait(tasks, timeout=JOB_BUDGET_S)
     for t in pending:
         t.cancel()
@@ -216,6 +241,13 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
             continue
         if p:
             cands.append(p)
+    if bart_task is not None:
+        # HARD CAP on BART: under CPU contention a 406M beam search can crawl
+        # for many minutes — never let it hold the job hostage.
+        try:
+            cands.extend(await asyncio.wait_for(bart_task, timeout=60))
+        except Exception:
+            logger.warning("BART candidates skipped (timeout/error)")
     if not cands:
         logger.error("all %d samples failed within %ss budget", n, JOB_BUDGET_S)
         cands = [text]
@@ -360,6 +392,24 @@ def _load_detector2():
         return None, None
 
 
+def _load_bart():
+    """v6 self-trained BART (pronoun-free casual style) — extra candidate
+    source in the best-of-N pool. Optional: serving continues without it."""
+    try:
+        from transformers import AutoModelForSeq2SeqLM
+        bart_id = os.environ.get("BART_MODEL_ID", "")
+        if not bart_id or not os.path.isdir(bart_id):
+            return None, None
+        tokenizer = AutoTokenizer.from_pretrained(bart_id)
+        model = AutoModelForSeq2SeqLM.from_pretrained(bart_id)
+        model.eval()
+        logger.info("BART candidate model loaded: %s", bart_id)
+        return tokenizer, model
+    except Exception:
+        logger.exception("BART candidate model failed to load")
+        return None, None
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     logger.info("loading detector=%s (+%s) ; humanizer=ollama:%s at %s",
@@ -367,6 +417,7 @@ async def lifespan(_: FastAPI):
     t0 = time.perf_counter()
     state["detector_tokenizer"], state["detector_model"] = _load_detector()
     state["detector2_tokenizer"], state["detector2_model"] = _load_detector2()
+    state["bart_tokenizer"], state["bart_model"] = _load_bart()
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
