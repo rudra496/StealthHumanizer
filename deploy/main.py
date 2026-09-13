@@ -442,9 +442,10 @@ async def lifespan(_: FastAPI):
     logger.info("loading detector=%s (+%s) ; humanizer=ollama:%s at %s",
                 DETECTOR_MODEL_ID, ENSEMBLE_DETECTOR_ID, LONG_MODEL, OLLAMA_BASE_URL)
     t0 = time.perf_counter()
-    state["detector_tokenizer"], state["detector_model"] = _load_detector()
-    state["detector2_tokenizer"], state["detector2_model"] = _load_detector2()
-    state["bart_tokenizer"], state["bart_model"] = _load_bart()
+    # BART candidate DISABLED: concurrent BART+gemma saturates the 4 ARM
+    # cores, pushing every gemma sample past the 100s budget (all-fail ->
+    # echo ships). Gemma-only candidates rank better anyway under the
+    # style-signal scorer. The v6 model stays on disk at /models/v6_model.
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
