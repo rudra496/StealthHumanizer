@@ -265,7 +265,34 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
     else:
         pool = safe
 
-    out = min(pool, key=_ensemble_ai_prob) if pool else text
+    # Composite ranking: the roberta ensemble cannot discriminate candidates
+    # (scores all ~1.0 on long text), so rank by the style signals that
+    # actually track ZeroGPT's behaviour — low AI-cliché density, high
+    # sentence-length burstiness, natural contraction use — with the
+    # ensemble as tiebreak.
+    _CLICHES = ("furthermore", "moreover", "additionally", "in conclusion",
+                "it is important to note", "delve", "tapestry", "navigate the",
+                "underscore", "multifaceted", "unprecedented", "pivotal role",
+                "foster", "leverag", "in the realm of", "a testament to",
+                "crucial", "comprehensive", "facilitate", "utilize")
+
+    def _style_score(c: str) -> float:
+        words = max(1, len(c.split()))
+        low = c.lower()
+        cliche = sum(1 for ph in _CLICHES if ph in low)
+        sents = [s for s in re.split(r"(?<=[.!?])\s+", c) if len(s.split()) > 2]
+        lens = [len(s.split()) for s in sents]
+        mean_len = sum(lens) / len(lens) if lens else words
+        var = sum((x - mean_len) ** 2 for x in lens) / len(lens) if len(lens) > 1 else 0
+        burst = (var ** 0.5) / mean_len if mean_len else 0
+        contr = len(re.findall(r"\b\w+(?:'|(?:\u2019))(?:s|t|re|ve|ll|d|m)\b", c, re.I))
+        # lower is better: cliché density penalised, burstiness rewarded
+        return (cliche / words * 100) - burst - min(contr, 4) * 0.5
+
+    def _rank_key(c: str) -> tuple:
+        return (round(_style_score(c), 2), round(_ensemble_ai_prob(c), 2))
+
+    out = min(pool, key=_rank_key) if pool else text
 
     # Pronoun surgical pass: rewrite only the sentences that add pronouns.
     # (Full-text re-sampling was dropped — gemma consistently reintroduces
