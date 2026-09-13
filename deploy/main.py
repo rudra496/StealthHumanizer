@@ -375,7 +375,10 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
         p = re.sub(r"\bI\s+think\b", r"arguably", p, flags=I_)
         p = re.sub(r"\bI\b", r"the writer", p, flags=I_)
         p = re.sub(r"\s{2,}", " ", p).strip()
-        if p and not _added_pronouns(text, p) and _f1_vs(text, p) >= 0.22:
+        # Word-level substitutions barely move meaning — gate only on sane
+        # length (the earlier F1>=0.22 gate rejected legitimately-casual
+        # rewrites on heavily reworded topics and kept the pronoun leak).
+        if p and not _added_pronouns(text, p) and 0.5 <= len(p) / max(1, len(out)) <= 1.6:
             out = p
 
     # Global AI-cliché scrub: the strongest detector signals are stock
