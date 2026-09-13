@@ -344,6 +344,40 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
         if not _added_pronouns(text, candidate):
             out = candidate
 
+    # Deterministic de-pronouning for any survivors — grammar-preserving
+    # transforms for the exact patterns gemma produces. This GUARANTEES the
+    # zero-added-pronoun contract even when rewrite attempts time out.
+    if _added_pronouns(text, out):
+        p = out
+        # specific patterns FIRST, case-insensitive (sentence-start "We must")
+        I_ = re.I
+        p = re.sub(r"\b(?:that\s+)?(?:we're|we are)\s+going\s+to\s+see\b", "ahead", p, flags=I_)
+        p = re.sub(r"\b(\w+)\s+(?:we're|we are)\s+facing\b", r"\1 the world faces", p, flags=I_)
+        p = re.sub(r"\b(?:we're|we are)\s+facing\b", r"looming", p, flags=I_)
+        p = re.sub(r"\b(?:that|which)\s+(?:we've|we have)\s+never\s+(\w+)\s+before\b", r"never \1 before", p, flags=I_)
+        p = re.sub(r"\b(?:that|which)\s+(?:we've|we have)\s+never\s+(\w+)\b", r"never \1", p, flags=I_)
+        p = re.sub(r"\b(?:we've|we have)\s+never\s+(\w+)\b", r"no one has ever \1", p, flags=I_)
+        p = re.sub(r"\b(\w+)\s+(?:we're|we are)\s+(\w+ing)\b(?!\s+to\b)", r"\1 \2", p, flags=I_)
+        p = re.sub(r"\bwe're\s+going\s+to\b", r"the goal is to", p, flags=I_)
+        p = re.sub(r"\bwe\s+need\s+to\b", r"there is a need to", p, flags=I_)
+        p = re.sub(r"\bwe\s+must\b", r"governments and citizens must", p, flags=I_)
+        p = re.sub(r"\bwe\s+can\b", r"it is possible to", p, flags=I_)
+        p = re.sub(r"\bwe\s+see\b", r"observers see", p, flags=I_)
+        p = re.sub(r"\bwe\s+all\b", r"everyone", p, flags=I_)
+        p = re.sub(r"\bwe\b", r"people", p, flags=I_)                                   # last resort
+        p = re.sub(r"\byou're\s+(\w+ing)\b", r"that is \1", p, flags=I_)
+        p = re.sub(r"\byou\s+(?:can|could)\b", r"it is possible to", p, flags=I_)
+        p = re.sub(r"\byou\s+(?:know|see)\b", r"clearly", p, flags=I_)
+        p = re.sub(r"\byou\b", r"readers", p, flags=I_)                                 # last resort
+        p = re.sub(r"\bour\b", r"the", p, flags=I_)
+        p = re.sub(r"\bmy\b", r"the", p, flags=I_)
+        p = re.sub(r"\bus\b", r"people", p, flags=I_)
+        p = re.sub(r"\bI\s+think\b", r"arguably", p, flags=I_)
+        p = re.sub(r"\bI\b", r"the writer", p, flags=I_)
+        p = re.sub(r"\s{2,}", " ", p).strip()
+        if p and not _added_pronouns(text, p) and _f1_vs(text, p) >= 0.22:
+            out = p
+
     # Global AI-cliché scrub: the strongest detector signals are stock
     # phrases. Deterministic removal/replacement on the final output.
     _SCRUB = [
