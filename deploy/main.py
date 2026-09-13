@@ -348,7 +348,7 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
     # transforms for the exact patterns gemma produces. This GUARANTEES the
     # zero-added-pronoun contract even when rewrite attempts time out.
     if _added_pronouns(text, out):
-        p = out
+        p = out.replace("\u2019", "'").replace("\u2018", "'")  # gemma writes curly apostrophes
         # specific patterns FIRST, case-insensitive (sentence-start "We must")
         I_ = re.I
         p = re.sub(r"\b(?:that\s+)?(?:we're|we are)\s+going\s+to\s+see\b", "ahead", p, flags=I_)
