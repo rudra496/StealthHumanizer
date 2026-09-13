@@ -299,9 +299,10 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
     # Pronoun surgical pass: rewrite only the sentences that add pronouns.
     # (Full-text re-sampling was dropped — gemma consistently reintroduces
     # pronouns on some topics, and the extra 35s batch burned the budget.)
-    if _added_pronouns(text, out) and (time.perf_counter() - t0) < 130:
+    if _added_pronouns(text, out) and (time.perf_counter() - t0) < 150:
         sents = re.split(r"(?<=[.!?])\s+", out)
         src_sents = re.split(r"(?<=[.!?])\s+", text)
+        used_src = set()  # never substitute the same source sentence twice
         fixed = []
         for s in sents:
             if not _added_pronouns(text, s):
@@ -318,12 +319,21 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
             if cand and not _added_pronouns(text, cand) and _f1_vs(s, cand) >= 0.35:
                 new_s = cand
             else:
-                # floor: substitute the best-matching ORIGINAL sentence —
-                # the source is pronoun-clean by definition.
-                best = max(src_sents, key=lambda ss: _f1_vs(ss, s), default=s)
-                new_s = best if best.strip() else s
+                # floor: best-matching UNUSED original sentence; if all used,
+                # keep the candidate sentence as-is (pronoun risk beats duplication).
+                ranked = sorted(src_sents, key=lambda ss: _f1_vs(ss, s), reverse=True)
+                best = next((ss for ss in ranked if ss not in used_src and ss.strip()), "")
+                if best:
+                    used_src.add(best)
+                    new_s = best
+                else:
+                    new_s = s
             fixed.append(new_s)
         candidate = " ".join(fixed)
+        # dedupe any exact repeated sentences, order-preserving
+        seen = set()
+        candidate = " ".join(x for x in re.split(r"(?<=[.!?])\s+", candidate)
+                             if not (x in seen or seen.add(x)))
         if not _added_pronouns(text, candidate):
             out = candidate
     out_ai_prob = _ensemble_ai_prob(out) if out else 1.0
