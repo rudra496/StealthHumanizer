@@ -417,10 +417,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, ...responsePayload });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error';
-    // Surface actionable errors verbatim (timeouts, 502s from upstream, config
-    // issues, provider API errors, quota, auth) — these are user-relevant. Stack traces stay hidden.
-    const isActionable = /timeout|timed out|unreachable|502|503|504|400|401|403|404|429|Rudra|upstream|preconfigured|API error|quota|rate limit|unauthorized|forbidden|invalid api key|model_not_found|does not exist/i.test(message);
-    const safe = isActionable ? message : (process.env.NODE_ENV === 'development' ? message : 'Internal error');
-    return NextResponse.json({ success: false, error: safe }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
