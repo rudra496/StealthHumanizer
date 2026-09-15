@@ -205,7 +205,8 @@ export async function POST(request: NextRequest) {
 
             const target = targetScore || 80;
     void target;
-    const chunks = chunkText(text, 2500);
+    const chunkSize = model === 'groq' ? 1800 : 2500;
+    const chunks = chunkText(text, chunkSize);
 
     // Language note for non-English/non-Chinese text (Chinese is handled by getSystemPrompt)
     let langNote = '';

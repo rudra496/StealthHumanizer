@@ -666,6 +666,21 @@ async function openAICompatibleGenerate(
   model: string,
   options: GenerationOptions = {}
 ): Promise<string> {
+  const isGroq = apiUrl.includes('groq.com');
+  const estimatedInputTokens = Math.ceil((userPrompt.length + systemPrompt.length) / 3);
+
+  // Groq free tier enforces a strict 1000 Output Tokens Per Minute (OTPM) limit per request.
+  // When max_tokens exceeds 950, Groq immediately returns a 400 limit error.
+  // Cap Groq at 900 tokens maximum, with headroom proportional to expected output.
+  let maxTokens = options.maxTokens;
+  if (isGroq) {
+    if (!maxTokens || maxTokens > 900) {
+      maxTokens = Math.min(900, Math.max(250, Math.ceil(estimatedInputTokens * 1.5) + 100));
+    }
+  } else if (!maxTokens) {
+    maxTokens = 4096;
+  }
+
   const response = await fetchWithRetry(apiUrl, {
     method: 'POST',
     headers: {
@@ -681,13 +696,14 @@ async function openAICompatibleGenerate(
       ],
       temperature: options.temperature ?? 0.9,
       top_p: options.topP ?? 0.95,
-      max_tokens: options.maxTokens ?? 4096,
+      max_tokens: maxTokens,
     }),
   });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error?.message || `API error: ${response.status}`);
+    const detail = error.error?.message || error.message || `API error: ${response.status}`;
+    throw new Error(detail);
   }
 
   const data = await response.json();
@@ -1223,7 +1239,8 @@ Provide ${count} DIFFERENT alternative humanizations of the original sentence. M
 
 Return ONLY the ${count} alternative sentences, one per line. No numbering, no explanations.`;
 
-  const result = await generateWithProvider(provider, apiKey, altPrompt, '', { temperature: 1.0, maxTokens: 1024 });
+  const altMaxTokens = provider === 'groq' ? 400 : 1024;
+  const result = await generateWithProvider(provider, apiKey, altPrompt, '', { temperature: 1.0, maxTokens: altMaxTokens });
 
   return result
     .split('\n')
