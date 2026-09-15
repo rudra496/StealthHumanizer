@@ -58,8 +58,8 @@ importers:
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
       autoprefixer:
-        specifier: ^10.5.6
-        version: 10.5.6(postcss@8.5.25)
+        specifier: ^10.6.0
+        version: 10.6.0(postcss@8.5.25)
       eslint:
         specifier: ^9.0.0
         version: 9.39.4(jiti@2.7.0)(supports-color@7.2.0)
@@ -1148,8 +1148,8 @@ packages:
     resolution: {integrity: sha512-hsU18Ae8CDTR6Kgu9DYf0EbCr/a5iGL0rytQDobUcdpYOKokk8LEjVphnXkDkgpi0wYVsqrXuP0bZxJaTqdgoA==}
     engines: {node: '>= 0.4'}
 
-  autoprefixer@10.5.6:
-    resolution: {integrity: sha512-HiH4oYNc5+DQEx/b8FPfMj+WHH/WWUBmbN5r1Uf/ixtfyFkk+wGIlfJT/RD5eAyzlwkeYRtZUCI8qrEi26pl2g==}
+  autoprefixer@10.6.0:
+    resolution: {integrity: sha512-A26d6qs9kqGgkmImIXMYvXTzqb4Qv7AVgpY1NXzr9Y659J8qHHnLOO/zE8ewIGFMprOolAoRAQYDgNryXIJKBw==}
     engines: {node: ^10 || ^12 || >=14}
     hasBin: true
     peerDependencies:
@@ -3538,7 +3538,7 @@ snapshots:
 
   async-function@1.0.0: {}
 
-  autoprefixer@10.5.6(postcss@8.5.25):
+  autoprefixer@10.6.0(postcss@8.5.25):
     dependencies:
       browserslist: 4.28.9
       caniuse-lite: 1.0.30001810
