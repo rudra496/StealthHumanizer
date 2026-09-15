@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, Key, Eye, EyeOff, ExternalLink, Shield, Check, X, Zap, Star, RotateCcw } from 'lucide-react';
-import { WEB_PROVIDERS as PROVIDERS, getProvider, testApiKey } from '@/lib/providers';
+import { WEB_PROVIDERS as PROVIDERS, getProvider, testApiKey, validateApiKey } from '@/lib/providers';
 import { getApiKeys, setApiKeys, clearApiKeys } from '@/lib/storage';
 import { ModelProvider } from '@/lib/types';
 
@@ -45,14 +45,15 @@ export default function Settings({ showToast }: SettingsProps) {
       return; 
     }
     setTesting(id);
-    showToast('info', `Testing ${id}...`);
+    const providerName = getProvider(id as any)?.name || id;
+    showToast('info', `Testing ${providerName}...`);
     try {
-      const valid = await testApiKey(id as any, key.trim());
+      const result = await validateApiKey(id as any, key.trim());
       setTesting(null);
-      if (valid) {
-        showToast('success', `${id} key is valid! ✅`);
+      if (result.valid) {
+        showToast('success', `${providerName} key is valid! ✅`);
       } else {
-        showToast('error', `${id} key is invalid. Please check your API key and try again. ❌`);
+        showToast('error', `${providerName} error: ${result.error || 'Invalid API key'} ❌`);
       }
     } catch (err: any) {
       setTesting(null);
@@ -63,18 +64,34 @@ export default function Settings({ showToast }: SettingsProps) {
   const current = getProvider(selectedProvider as any);
 
   const handleQuickSetup = async () => {
-    if (!quickKey.trim()) { showToast('warning', 'Please enter an API key'); return; }
+    const trimmed = quickKey.trim();
+    if (!trimmed) { showToast('warning', 'Please enter an API key'); return; }
     setQuickTesting(true);
     setQuickStatus('testing');
+
+    // Auto-detect provider from key prefix if possible
+    let targetProvider: ModelProvider = 'gemini';
+    if (trimmed.startsWith('gsk_')) {
+      targetProvider = 'groq';
+    } else if (trimmed.startsWith('sk-or-')) {
+      targetProvider = 'openrouter';
+    } else if (trimmed.startsWith('sk-ant-')) {
+      targetProvider = 'claude';
+    } else if (trimmed.startsWith('sk-')) {
+      targetProvider = 'openai';
+    }
+
+    const providerName = getProvider(targetProvider)?.name || targetProvider;
+
     try {
-      const valid = await testApiKey('gemini' as ModelProvider, quickKey.trim());
-      if (valid) {
-        handleSave('gemini', quickKey.trim());
+      const result = await validateApiKey(targetProvider, trimmed);
+      if (result.valid) {
+        handleSave(targetProvider, trimmed);
         setQuickStatus('valid');
-        showToast('success', 'Gemini key saved and verified! You\'re ready to go.');
+        showToast('success', `${providerName} key saved and verified! You're ready to go.`);
       } else {
         setQuickStatus('invalid');
-        showToast('error', 'Invalid Gemini key. Check and try again.');
+        showToast('error', `Invalid ${providerName} key: ${result.error || 'Check and try again.'}`);
       }
     } catch (err: any) {
       setQuickStatus('invalid');
@@ -93,9 +110,9 @@ export default function Settings({ showToast }: SettingsProps) {
     let validCount = 0;
     await Promise.all(entries.map(async ([id, key]) => {
       try {
-        const ok = await testApiKey(id as ModelProvider, key!);
-        setTestAllStatus(prev => ({ ...prev, [id]: ok ? 'valid' : 'invalid' }));
-        if (ok) validCount++;
+        const res = await validateApiKey(id as ModelProvider, key!);
+        setTestAllStatus(prev => ({ ...prev, [id]: res.valid ? 'valid' : 'invalid' }));
+        if (res.valid) validCount++;
       } catch {
         setTestAllStatus(prev => ({ ...prev, [id]: 'invalid' }));
       }
@@ -331,7 +348,7 @@ export default function Settings({ showToast }: SettingsProps) {
                 <li>Go to <a href="https://console.groq.com/keys" target="_blank" className="text-accent-400 hover:underline">Groq Console</a></li>
                 <li>Sign up (free)</li>
                 <li>Create API key</li>
-                <li>Paste above — uses Llama 3.3 70B for free!</li>
+                <li>Paste above — uses Qwen 3.8 27B / GPT-OSS for free!</li>
               </ol>
             </div>
           )}

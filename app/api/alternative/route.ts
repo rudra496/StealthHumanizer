@@ -31,6 +31,8 @@ export async function POST(request: NextRequest) {
     const alternatives = await generateAlternatives(model, apiKey, original, current, systemPrompt, 3);
     return NextResponse.json({ success: true, alternatives });
   } catch (err: unknown) {
-    return handleApiError(err, true);
+    const message = err instanceof Error ? err.message : 'Internal error';
+    const isActionable = /timeout|timed out|unreachable|502|503|504|400|401|403|404|429|API error|quota|rate limit|unauthorized|forbidden|invalid api key/i.test(message);
+    return NextResponse.json({ success: false, error: isActionable ? message : 'Internal error' }, { status: 500 });
   }
 }

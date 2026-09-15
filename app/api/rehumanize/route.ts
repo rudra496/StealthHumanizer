@@ -137,6 +137,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error';
-    return NextResponse.json({ success: false, error: process.env.NODE_ENV === 'development' ? message : 'Internal error' }, { status: 500 });
+    const isActionable = /timeout|timed out|unreachable|502|503|504|400|401|403|404|429|API error|quota|rate limit|unauthorized|forbidden|invalid api key/i.test(message);
+    return NextResponse.json({ success: false, error: (isActionable || process.env.NODE_ENV === 'development') ? message : 'Internal error' }, { status: 500 });
   }
 }

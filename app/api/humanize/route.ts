@@ -418,9 +418,9 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error';
     // Surface actionable errors verbatim (timeouts, 502s from upstream, config
-    // issues) — these are user-relevant. Stack traces stay hidden.
-    const isActionable = /timeout|timed out|unreachable|502|503|504|Rudra|upstream|preconfigured/i.test(message);
-    const safe = isActionable ? message : 'Internal error';
+    // issues, provider API errors, quota, auth) — these are user-relevant. Stack traces stay hidden.
+    const isActionable = /timeout|timed out|unreachable|502|503|504|400|401|403|404|429|Rudra|upstream|preconfigured|API error|quota|rate limit|unauthorized|forbidden|invalid api key|model_not_found|does not exist/i.test(message);
+    const safe = isActionable ? message : (process.env.NODE_ENV === 'development' ? message : 'Internal error');
     return NextResponse.json({ success: false, error: safe }, { status: 500 });
   }
 }

@@ -82,6 +82,21 @@ export async function fetchWithRetry(
 ): Promise<Response> {
   const url = sanitizeUrl(rawUrl);
 
+  const defaultHeaders: Record<string, string> =
+    typeof window === 'undefined'
+      ? { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+      : {};
+
+  const mergedHeaders = {
+    ...defaultHeaders,
+    ...(options.headers as Record<string, string> || {}),
+  };
+
+  const finalOptions: RequestInit = {
+    ...options,
+    headers: mergedHeaders,
+  };
+
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -90,7 +105,7 @@ export async function fetchWithRetry(
 
     try {
       // eslint-disable-next-line no-restricted-syntax -- URL validated against provider allowlist above
-      const response = await fetch(url, { ...options, signal: controller.signal }); // lgtm[js/request-forgery]
+      const response = await fetch(url, { ...finalOptions, signal: controller.signal }); // lgtm[js/request-forgery]
       clearTimeout(timeout);
 
       if (response.status >= 500 && attempt < maxRetries) {
@@ -1219,14 +1234,20 @@ Return ONLY the ${count} alternative sentences, one per line. No numbering, no e
 
 // ==================== TEST API KEY ====================
 
-export async function testApiKey(provider: ModelProvider, apiKey: string): Promise<boolean> {
+export async function validateApiKey(provider: ModelProvider, apiKey: string): Promise<{ valid: boolean; error?: string }> {
   // CLI-runner providers don't have API keys to test from the browser. The
   // server-side equivalent is testCliProvider() in lib/server/providers-runtime.
-  if (isCliOnlyProvider(provider)) return false;
+  if (isCliOnlyProvider(provider)) return { valid: false, error: 'CLI-only provider cannot be tested in browser' };
   try {
     await generateWithProvider(provider, apiKey, 'You are a test assistant.', 'Say "ok" and nothing else.', { maxTokens: 10 });
-    return true;
-  } catch {
-    return false;
+    return { valid: true };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return { valid: false, error: msg };
   }
+}
+
+export async function testApiKey(provider: ModelProvider, apiKey: string): Promise<boolean> {
+  const res = await validateApiKey(provider, apiKey);
+  return res.valid;
 }

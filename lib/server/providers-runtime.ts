@@ -47,7 +47,7 @@ export async function generateWithProvider(
 // generateAlternatives uses the HTTP-only generateWithProvider internally;
 // it doesn't currently support CLI runners (alternatives are an HTTP-only
 // feature surfaced in the web UI, not the CLI).
-export { generateAlternatives, testApiKey } from '../providers';
+export { generateAlternatives, testApiKey, validateApiKey } from '../providers';
 
 /** Best-effort check that a CLI-runner binary is reachable. Spawns
  *  `<bin> --version` and looks for a zero exit. Returns false for non-CLI
