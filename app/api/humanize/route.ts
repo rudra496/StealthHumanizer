@@ -4,7 +4,7 @@ import { getSystemPrompt, getSelfCheckPrompt, getCorpusAwareSystemPrompt, LEVEL_
 import { getProvider, isCliOnlyProvider } from '@/lib/providers';
 import { generateWithProvider } from '@/lib/server/providers-runtime';
 import { detectAI } from '@/lib/detector';
-import { postprocess, corpusAwarePostprocess, safeClean, intensityPostprocess } from '@/lib/postprocess';
+import { postprocess, corpusAwarePostprocess, safeClean, intensityPostprocess, scrubAIText } from '@/lib/postprocess';
 import { localRehumanizeSentence, replaceSentencesInText } from '@/lib/rehumanize';
 import { loadStyleModelAsync, loadStyleModel, hasStyleModel } from '@/lib/style-model';
 import { calibrateWithCorpus } from '@/lib/detector';
@@ -145,10 +145,10 @@ export async function POST(request: NextRequest) {
     // Higher intensity -> higher temperature for higher perplexity (less
     // predictable = harder to detect).
     const params = intensity === 'ninja'
-      ? { temperature: 0.85, topP: 0.97 }
+      ? { temperature: 0.95, topP: 0.95 }
       : (intensity === 'aggressive' || style === 'stealth')
-        ? { temperature: 0.8, topP: 0.95 }
-        : { temperature: 0.5, topP: 0.90 };
+        ? { temperature: 0.92, topP: 0.95 }
+        : { temperature: 0.88, topP: 0.95 };
     const systemPrompt = useCorpus
       ? getCorpusAwareSystemPrompt(style, writingSample, undefined, language, freezeWords)
       : getSystemPrompt(style, writingSample, language, freezeWords);
@@ -176,7 +176,8 @@ export async function POST(request: NextRequest) {
               rewritten += (j > 0 ? '\n\n' : '') + out;
             }
           }
-          const final = enablePostprocess ? postprocess(rewritten, { light: true, style: style as any, synonymIntensity }) : rewritten;
+          const postprocessed = enablePostprocess ? postprocess(rewritten, { light: true, style: style as any, synonymIntensity }) : rewritten;
+          const final = scrubAIText(postprocessed);
           const detection = detectAI(final);
           const confidenceReport = buildConfidenceReport(detection.score);
           const runtimeModelScore = await scoreHumanLikeness(final);
@@ -362,6 +363,7 @@ export async function POST(request: NextRequest) {
           finalText = intensityPostprocess(finalText, 'aggressive', { style: style as any });
         }
       }
+      finalText = scrubAIText(finalText);
     }
     const finalDetection = detectAI(finalText);
     const confidenceReport = buildConfidenceReport(finalDetection.score);

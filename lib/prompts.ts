@@ -139,13 +139,13 @@ CRITICAL RULES — Follow these EXACTLY:
    - Every sentence must be a complete, grammatically correct sentence.
    - Do NOT output bullet points, numbered lists, or markdown formatting unless the original had them.
 
-3. NATURAL SENTENCE VARIATION:
-   - Mix up sentence lengths naturally: some short (5-12 words), some medium (15-20), some longer.
+3. NATURAL SENTENCE VARIATION (BURSTINESS):
+   - Mix up sentence lengths naturally: mix short punchy sentences (4-8 words) with medium and longer sentences.
    - Avoid monotonous, perfectly balanced sentences.
    - Write clearly and simply.
 
 4. WORD CHOICE:
-   - Replace cliché AI buzzwords: furthermore, moreover, delve into, tapestry, landscape, realm, multifaceted, robust, seamless, synergy, paradigm, innovative, utilize, facilitate, leverage.
+   - Replace cliché AI buzzwords: furthermore, moreover, delve into, tapestry, landscape, realm, multifaceted, robust, seamless, synergy, paradigm, innovative, utilize, facilitate, leverage, in conclusion, ultimately.
    - Use clear, simple, accurate language over complex jargon.
    - Use natural contractions where appropriate (it's, don't, can't, won't).
    - Avoid overly formal transitions unless the context strictly requires it.
@@ -160,15 +160,14 @@ CRITICAL RULES — Follow these EXACTLY:
    - Occasionally start a sentence with a conjunction (And, But, So) for natural flow.
    - Use parenthetical asides sparingly for a human touch.
 
-7. COMPLETENESS CHECK (CRITICAL):
+7. NO UNWANTED PRONOUNS / CONVERSATIONAL FILLER:
+   - Do NOT add personal pronouns or conversational filler that are not in the original text: I, me, my, we, us, our, you, your, you'll, 'you know', folks.
+   - Write about the subject matter itself, not the reader or writer.
+
+8. COMPLETENESS & QUALITY RECHECK:
    - Before outputting, verify: does every paragraph from the input have a corresponding paragraph in the output?
    - Did you drop any sentences? If so, add them back in rewritten form.
    - Is every sentence complete and grammatically correct?
-
-8. GRAMMAR AND QUALITY RECHECK (FINAL STEP BEFORE OUTPUT):
-   - Review your entire response internally for grammatical correctness.
-   - Fix any awkward phrasing, missing words, subject-verb disagreements, or punctuation errors.
-   - Ensure you did not introduce any weird sentence fragments or run-on sentences.
    - The final text MUST read flawlessly, as if professionally edited.
 
 OUTPUT: Return ONLY the rewritten text. No explanations.`;
@@ -179,31 +178,22 @@ OUTPUT: Return ONLY the rewritten text. No explanations.`;
 // ==================== STYLE-SPECIFIC RULES ====================
 
 const STYLE_OVERLAYS: Record<StylePreset, string> = {
-  humanize: `Style: General Natural. Write clearly and naturally. Avoid overly formal academic language unless the topic demands it.`,
-  academic: `Style: Elite Academic (Q1 Journal Level). Write like a published researcher in a top-tier peer-reviewed journal. Use precise, nuanced vocabulary. Avoid vague assertions.
-CRITICAL RULES FOR RESEARCH-GRADE WRITING:
-1. NEVER use colloquial transition words (e.g., DO NOT use "plus", "also", "besides", "like", "a lot").
-2. ALWAYS use Academic Word List (AWL) vocabulary for transitions and framing (e.g., MUST use "furthermore", "moreover", "consequently", "subsequently", "nevertheless").
-3. CRITICAL EXAMPLE OF DESIRED VOCABULARY AND SENTENCE STRUCTURE:
-"While initial studies suggested a robust correlation, empirical evidence now indicates that we must carefully elucidate the underlying mechanisms before drawing definitive conclusions. By mitigating these variables, we can synthesize a more accurate theoretical framework."
-Incorporate words like: elucidate, empirical, mitigate, synthesize, corollary, paradigm, methodology, nuance.`,
-  casual: `Style: Casual and friendly, like explaining something to a friend. Use contractions freely. Keep it relaxed and conversational, but every sentence must still be complete and grammatically correct — no fragments or unfinished thoughts.`,
-  professional: `Style: Elite Professional (Executive Level). Direct, authoritative, and strategic. Avoid marketing fluff or buzzwords.
-CRITICAL EXAMPLE OF DESIRED VOCABULARY AND SENTENCE STRUCTURE:
-"To effectively navigate the current market constraints, it is imperative to streamline operational redundancies. Our primary objective is to execute a targeted intervention that addresses the core inefficiencies without disrupting the overarching strategic trajectory."
-Incorporate words like: imperative, streamline, objective, intervention, trajectory. Short, powerful paragraphs.`,
+  humanize: `Style: General Natural. High burstiness — mix short punchy sentences (4-8 words) with medium ones. Use clear, direct words and natural contractions (it's, don't, isn't). Never use AI clichés like furthermore, moreover, additionally, delve, tapestry, multifaceted, in conclusion, ultimately. Do not add conversational pronouns.`,
+  academic: `Style: Elite Academic (Q1 Journal Humanized). Clear, objective, evidence-grounded research writing. Avoid robotic filler and stock transitions (do NOT use "furthermore", "moreover", "in conclusion", "it is important to note"). Vary sentence lengths naturally. Use precise domain terminology without stiff AI collocations.`,
+  casual: `Style: Casual and friendly, like explaining something to a colleague. Use contractions freely. Keep it relaxed and conversational, but every sentence must still be complete and grammatically correct — no fragments or unfinished thoughts.`,
+  professional: `Style: Elite Professional (Executive Level). Direct, authoritative, and strategic. Avoid marketing fluff or buzzwords. Short, clear, powerful sentences with high information density.`,
   creative: `Style: Vivid and engaging. Sensory details, fresh comparisons. Unexpected word choices. The writing should feel alive.`,
-  technical: `Style: Technical but human. Precise terms, concrete examples. "You'll see" not "It can be observed." Step-by-step.`,
+  technical: `Style: Technical but human. Precise terms, concrete examples. Clear step-by-step logic. Avoid robotic transitions.`,
   stealth: `Style: MAXIMUM STEALTH — anti-detector mode. Your single goal is to make this text read like a real human wrote it, so AI detectors score it as human. Stealth matters MORE than elegance.
 
 CRITICAL STEALTH RULES (these override everything else):
 1. BURSTINESS (most important): Deliberately mix sentence lengths. After a long sentence, write a very short one (3-7 words). Then a medium one. NEVER write three sentences in a row of similar length. Real humans write unevenly.
 2. PERPLEXITY: Prefer plain, slightly plain or unexpected word choices over the "obvious" smooth word. Real humans pick slightly off words sometimes. Do NOT write the most predictable next word.
 3. BAN these AI words entirely (never use them, ever): furthermore, moreover, additionally, in conclusion, it is important to note, it is worth noting, delve, tapestry, landscape, realm, navigate, leverage, utilize, facilitate, robust, seamless, streamline, synergy, paradigm, holistic, multifaceted, innovative, cutting-edge, state-of-the-art, transformative, comprehensive, unprecedented, foster, cultivate, empower, underscore, showcase, elucidate, mitigate, synthesize, a myriad of, in today's world, plays a crucial role, it is crucial, it is essential.
-4. CONTRACTIONS: Use them naturally (it's, don't, can't, we're, that's, won't). Text with zero contractions reads as AI.
+4. CONTRACTIONS: Use them naturally (it's, don't, can't, isn't, won't). Text with zero contractions reads as AI.
 5. VARY SENTENCE STARTS: Do not start two sentences the same way. Occasionally start with "And", "But", "So", or a short plain word.
 6. NO em-dashes (—). Use commas, periods, or parentheses instead.
-7. HUMAN TOUCH: Add one small natural touch — a parenthetical aside, a mild conversational phrase, or a slightly personal wording — while staying appropriate to the topic.
+7. DO NOT ADD PRONOUNS: Write about the subject objectively. Never add: you, we, I, our, us, folks.
 8. PRESERVE MEANING EXACTLY: Keep every fact, number, name, and idea. Stay within +/-15% of the original length. Never invent or drop information.`,
 };
 

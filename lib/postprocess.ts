@@ -834,7 +834,7 @@ const AI_LEXICON_PHRASES: [RegExp, string][] = [
   [/\bit is worth (?:noting|mentioning) that\s*,?\s*/gi, ''],
   [/\bit should be (?:noted|emphasized) that\s*,?\s*/gi, ''],
   [/\bit must be noted that\s*,?\s*/gi, ''],
-  [/\bit is (?:crucial|essential|imperative|vital) to\s+/gi, 'you must '],
+  [/\bit is (?:crucial|essential|imperative|vital) to\s+/gi, 'it helps to '],
   [/\bit is (?:evident|clear|apparent) that\s*,?\s*/gi, 'clearly, '],
   [/\bin conclusion\s*,?\s*/gi, ''],
   [/\bin summary\s*,?\s*/gi, ''],
@@ -1023,6 +1023,85 @@ export function intensityPostprocess(
   if (intensity === 'medium') return tidy(r);
   // aggressive + ninja: full stealth treatment (forceContractions + burstiness).
   return stealthPostprocess(text, { style: options?.style });
+}
+
+/**
+ * Global AI-cliché and de-pronoun scrubber (ported directly from the proven deploy/main.py engine).
+ * Eliminates stock AI transition phrases and removes unprompted pronoun leakage.
+ */
+export function scrubAIText(text: string): string {
+  let out = text.replace(/\u2019/g, "'").replace(/\u2018/g, "'");
+
+  const CLICHE_SCRUB: [RegExp, string][] = [
+    [/\bIt is important to note that\b/gi, ''],
+    [/\bIt is worth noting that\b/gi, ''],
+    [/\bIt is widely (?:acknowledged|recognized) that\b/gi, ''],
+    [/\bIt is essential to recognize that\b/gi, ''],
+    [/\bIt is important to highlight that\b/gi, ''],
+    [/\bIn conclusion,?\s*/gi, ''],
+    [/\bUltimately,?\s*/gi, ''],
+    [/\bFurthermore,?\s*/gi, 'Also, '],
+    [/\bMoreover,?\s*/gi, 'Plus, '],
+    [/\bAdditionally,?\s*/gi, 'And '],
+    [/\bConsequently,?\s*/gi, 'So '],
+    [/\bprecipitated\b/gi, 'caused'],
+    [/\bcascading\b/gi, 'chained'],
+    [/\bunprecedented\b/gi, 'record'],
+    [/\bmultifaceted\b/gi, 'varied'],
+    [/\bunderscore[sd]?\b/gi, 'show'],
+    [/\bdelve into\b/gi, 'dig into'],
+    [/\bfoster(?:ing|s|ed)?\b/gi, 'support'],
+    [/\bleverag(?:ing|e|es|ed)\b/gi, 'use'],
+    [/\bpivotal role\b/gi, 'key part'],
+    [/\bin the realm of\b/gi, 'in'],
+    [/\ba testament to\b/gi, 'proof of'],
+    [/\bvibrant\b/gi, 'lively'],
+    [/\bnavigat(?:e|ing) the\b/gi, 'handle the'],
+    [/\bfacilitate(?:s|d)?\b/gi, 'helps'],
+    [/\butilize(?:s|d)?\b/gi, 'use'],
+    [/\bcomprehensive\b/gi, 'complete'],
+    [/\bfundamentally\b/gi, 'basically'],
+    [/\bparadigm shift\b/gi, 'big change'],
+    [/\btransformative\b/gi, 'major'],
+    [/\bholistic\b/gi, 'complete'],
+    [/\bseamlessly\b/gi, 'smoothly'],
+    [/\bgame-changer\b/gi, 'big step forward'],
+    [/\brobust\b/gi, 'strong'],
+  ];
+
+  const PRON_TRANSFORMS: [RegExp, string][] = [
+    [/\b(?:that\s+)?(?:we're|we are)\s+going\s+to\s+see\b/gi, 'ahead'],
+    [/\b(\w+)\s+(?:we're|we are)\s+facing\b/gi, '$1 the world faces'],
+    [/\b(?:we're|we are)\s+facing\b/gi, 'looming'],
+    [/\b(?:that|which)\s+(?:we've|we have)\s+never\s+(\w+)\s+before\b/gi, 'never $1 before'],
+    [/\b(?:that|which)\s+(?:we've|we have)\s+never\s+(\w+)\b/gi, 'never $1'],
+    [/\b(?:we've|we have)\s+never\s+(\w+)\b/gi, 'no one has ever $1'],
+    [/\bwe're\s+going\s+to\b/gi, 'the goal is to'],
+    [/\bwe\s+need\s+to\b/gi, 'there is a need to'],
+    [/\bwe\s+must\b/gi, 'governments and citizens must'],
+    [/\bwe\s+can\b/gi, 'it is possible to'],
+    [/\bwe\s+see\b/gi, 'observers see'],
+    [/\bwe\s+all\b/gi, 'everyone'],
+    [/\bwe\b/gi, 'people'],
+    [/\byou're\s+(\w+ing)\b/gi, 'that is $1'],
+    [/\byou\s+(?:can|could)\b/gi, 'it is possible to'],
+    [/\byou\s+(?:know|see)\b/gi, 'clearly'],
+    [/\byou\b/gi, 'readers'],
+    [/\bour\b/gi, 'the'],
+    [/\bmy\b/gi, 'the'],
+    [/\bus\b/gi, 'people'],
+    [/\bI\s+think\b/gi, 'arguably'],
+    [/\bI\b/gi, 'the writer'],
+  ];
+
+  for (const [pat, rep] of CLICHE_SCRUB) out = out.replace(pat, rep);
+  for (const [pat, rep] of PRON_TRANSFORMS) out = out.replace(pat, rep);
+
+  out = out.replace(/\s{2,}/g, ' ').trim();
+  out = out.replace(/^(?:[,.]|\bAnd\b|\bAlso\b)\s*/i, '');
+  out = out.split('. ').map(x => x.trim() ? x.charAt(0).toUpperCase() + x.slice(1) : '').filter(Boolean).join('. ');
+  if (out && !/[.!?]$/.test(out)) out += '.';
+  return capitalizeSentenceStarts(out);
 }
 
 /**
