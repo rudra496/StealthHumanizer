@@ -31,7 +31,7 @@ importers:
         version: 1.12.3
       next:
         specifier: 16.3.5
-        version: 16.3.5(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@26.6.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        version: 16.3.5(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@26.6.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       pdfjs-dist:
         specifier: ^6.3.289
         version: 6.3.289
@@ -49,8 +49,8 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3
       '@types/node':
-        specifier: ^26.6.0
-        version: 26.6.0
+        specifier: ^26.6.1
+        version: 26.6.1
       '@types/react':
         specifier: ^19.3.0
         version: 19.3.0
@@ -876,8 +876,8 @@ packages:
   '@types/json5@0.0.29':
     resolution: {integrity: sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ==}
 
-  '@types/node@26.6.0':
-    resolution: {integrity: sha512-FWWQhDlKSnEJVe+CTJCQL8Fol7s1MKo3Ud0fjryxoOoH+hwMIPxol0MguYrLi2I0VvIFwOU2DwdWET2+px15qg==}
+  '@types/node@26.6.1':
+    resolution: {integrity: sha512-VqGJBMCtdhqkBUCcBLvywI0NJ+KLuVzgNnlBUNFOQjqVxzo2lxLUNg1DSey8+u2u6ktswSAxg+s68QLzWHNOuA==}
 
   '@types/pako@2.0.4':
     resolution: {integrity: sha512-VWDCbrLeVXJM9fihYodcLiIv0ku+AlOa/TQ1SvYOaBuyrSKgEcro95LJyIsJ4vSo6BXIxOKxiJAat04CmST9Fw==}
@@ -3257,7 +3257,7 @@ snapshots:
 
   '@types/json5@0.0.29': {}
 
-  '@types/node@26.6.0':
+  '@types/node@26.6.1':
     dependencies:
       undici-types: 8.9.0
 
@@ -4633,7 +4633,7 @@ snapshots:
 
   natural-compare@1.4.0: {}
 
-  next@16.3.5(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@26.6.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
+  next@16.3.5(@babel/core@7.29.7(supports-color@7.2.0))(@types/node@26.6.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
     dependencies:
       '@next/env': 16.3.5
       '@swc/helpers': 0.5.23
@@ -4652,7 +4652,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.3.5
       '@next/swc-win32-arm64-msvc': 16.3.5
       '@next/swc-win32-x64-msvc': 16.3.5
-      sharp: 0.35.4(@types/node@26.6.0)
+      sharp: 0.35.4(@types/node@26.6.1)
     transitivePeerDependencies:
       - '@babel/core'
       - '@types/node'
@@ -4951,7 +4951,7 @@ snapshots:
 
   setimmediate@1.0.5: {}
 
-  sharp@0.35.4(@types/node@26.6.0):
+  sharp@0.35.4(@types/node@26.6.1):
     dependencies:
       '@img/colour': 1.1.0
       detect-libc: 2.1.2
@@ -4982,7 +4982,7 @@ snapshots:
       '@img/sharp-win32-arm64': 0.35.4
       '@img/sharp-win32-ia32': 0.35.4
       '@img/sharp-win32-x64': 0.35.4
-      '@types/node': 26.6.0
+      '@types/node': 26.6.1
     optional: true
 
   shebang-command@2.0.0:
