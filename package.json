@@ -47,7 +47,7 @@
     "test": "npm run test:roadmap && npm run test:v1-forwarding && npm run test:security && npm run test:cli"
   },
   "dependencies": {
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.47.0",
     "mammoth": "^1.12.3",
