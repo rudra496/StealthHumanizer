@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isRudraHumanizerConfigured } from '@/lib/server/rudra-free';
+import { isRudraHumanizerConfigured, rudraFetch } from '@/lib/server/rudra-free';
 
 // Same-origin shuttle for the background-job humanization:
 //   POST /api/humanize-job            -> Oracle /job/start   (returns {id} fast)
@@ -8,28 +8,21 @@ import { isRudraHumanizerConfigured } from '@/lib/server/rudra-free';
 // embedded-browser restrictions) and Vercel Hobby caps functions at 60s —
 // polling keeps every hop a ~100ms same-origin call while the 80-100s
 // best-of-4 sampling runs on the Oracle side uninterrupted.
+// The VPS is reached through a Cloudflare quick tunnel whose URL can rotate —
+// rudraFetch resolves the current URL and self-heals via the broker on failure.
 
-const BASE = (process.env.RUDRA_API_BASE_URL || 'https://129-159-229-170.sslip.io').replace(/\/$/, '');
 const KEY = (process.env.RUDRA_HUMANIZER_API_KEY || '').trim();
 const UPSTREAM_TIMEOUT = 20_000;
 
 async function shuttle(path: string, init?: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT);
-  try {
-    return await fetch(`${BASE}/api/job/${path}`, {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${KEY}`,
-        'User-Agent': 'stealthhumanizer-shuttle/1.0',
-      },
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+  return rudraFetch(`/api/job/${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${KEY}`,
+      'User-Agent': 'stealthhumanizer-shuttle/1.0',
+    },
+  }, UPSTREAM_TIMEOUT);
 }
 
 export async function POST(request: NextRequest) {
