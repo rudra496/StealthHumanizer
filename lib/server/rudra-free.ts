@@ -35,7 +35,10 @@ const DETECT_TIMEOUT_MS = 15_000;
 
 function primaryBase(): string {
   const env = (process.env.RUDRA_API_BASE_URL || '').trim();
-  if (env) return env.replace(/\/+$/, '');
+  // The production Vercel project still carries a legacy RUDRA_API_BASE_URL
+  // pointing at the sslip.io host whose ports OCI now blocks — treat that as
+  // stale and use tunnel resolution. Only non-legacy custom overrides win.
+  if (env && !/sslip\.io$|^https?:\/\/129\.159\.229\.170/.test(env)) return env.replace(/\/+$/, '');
   if (cachedBase && Date.now() - cachedBase.at < 5 * 60_000) return cachedBase.url;
   return KNOWN_TUNNEL_BASE;
 }
@@ -76,10 +79,14 @@ async function doRudraFetch(base: string, path: string, init: RequestInit, timeo
  */
 export async function rudraFetch(path: string, init: RequestInit, timeoutMs: number): Promise<Response> {
   const base = primaryBase();
+  const hasCustomOverride = (() => {
+    const env = (process.env.RUDRA_API_BASE_URL || '').trim();
+    return Boolean(env) && !/sslip\.io$|^https?:\/\/129\.159\.229\.170/.test(env);
+  })();
   try {
     return await doRudraFetch(base, path, init, timeoutMs);
   } catch (err) {
-    if (process.env.RUDRA_API_BASE_URL) throw err; // explicit override = no failover
+    if (hasCustomOverride) throw err; // explicit self-hoster override = no failover
     const fresh = await fetchTunnelBaseFromBroker();
     if (!fresh || fresh === base) throw err;
     cachedBase = { url: fresh, at: Date.now() };
