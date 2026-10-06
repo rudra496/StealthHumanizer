@@ -283,16 +283,28 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         const jobId: string = startData.id;
 
         let rd: any = null;
+        const pollIntervalMs = 4000;
+        const maxPolls = Math.ceil(260_000 / pollIntervalMs);
+        let pollCount = 0;
+        let lastStatus = 'starting';
         const deadline = Date.now() + 260_000;
+        setProgress({ pass: 0, max: maxPolls, message: 'Queued…' });
         while (Date.now() < deadline) {
-          await new Promise((r) => setTimeout(r, 4000));
+          await new Promise((r) => setTimeout(r, pollIntervalMs));
+          pollCount += 1;
           setPipelineStep('Humanizing (best-of-4 sampling)…');
+          setProgress({ pass: pollCount, max: maxPolls, message: `Sampling… (${pollCount}/${maxPolls})` });
           const stResp = await fetch(`${BASE_PATH}/api/humanize-job?id=${jobId}`);
           const stData = await stResp.json().catch(() => ({}));
-          if (stData?.status === 'done') { rd = stData; break; }
-          if (stData?.status === 'error') throw new Error(stData?.error || 'Humanization failed');
+          if (!stResp.ok || stData?.success === false) {
+            throw new Error(stData?.error || `Job status failed (HTTP ${stResp.status})`);
+          }
+          const status = String(stData?.status || stData?.state || '').toLowerCase();
+          if (status) lastStatus = status;
+          if (status === 'done' || status === 'completed' || typeof stData?.humanized === 'string') { rd = stData; break; }
+          if (status === 'error' || status === 'failed') throw new Error(stData?.error || 'Humanization failed');
         }
-        if (!rd) throw new Error('Humanization timed out — please try again');
+        if (!rd) throw new Error(`Humanization timed out while ${lastStatus} — please try again`);
         const fullText: string = rd.humanized || inputText;
         const det = detectAI(fullText);
         const sents = buildSentenceResults(inputText, fullText).map((row: any, i: number) => ({

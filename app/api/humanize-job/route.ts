@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         text: text.slice(0, 32000),
         temperature: typeof body.temperature === 'number' ? body.temperature : 0.85,
-        samples: 2,
+        samples: 4,
       }),
     });
     const data = await upstream.json().catch(() => ({}));
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Rudra Free model is not configured on the server.' }, { status: 500 });
   }
   const id = request.nextUrl.searchParams.get('id') || '';
-  if (!/^[a-f0-9]{6,32}$/.test(id)) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{5,127}$/.test(id)) {
     return NextResponse.json({ success: false, error: 'invalid job id' }, { status: 400 });
   }
   try {
