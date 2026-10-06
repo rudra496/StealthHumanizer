@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { assessSemanticFidelity } from '../../lib/semantic-fidelity.ts';
 import { localHumanizeText } from '../../lib/local-humanizer.ts';
 import { stripAILexicon } from '../../lib/postprocess.ts';
 import { estimateRunCost, getDailyObservability, getProviderBreakdown, summarizeObservability } from '../../lib/observability.ts';
 import { consumeHumanizeStream } from '../../lib/streaming-client.ts';
+
+const humanizerSource = await readFile(new URL('../../components/Humanizer.tsx', import.meta.url), 'utf8');
+const humanizeJobRouteSource = await readFile(new URL('../../app/api/humanize-job/route.ts', import.meta.url), 'utf8');
 
 test('semantic fidelity gives high score for meaning-preserving rewrite', () => {
   const report = assessSemanticFidelity(
@@ -79,4 +83,14 @@ test('privacy local humanizer preserves prohibitions instead of weakening never'
   const rewritten = localHumanizeText('Never share API keys or commit secrets.', { level: 'ninja', style: 'technical', tone: 'technical' });
   assert.doesNotMatch(rewritten, /rarely share/i);
   assert.match(rewritten, /never share/i);
+});
+
+test('rudra job route uses best-of-4 and accepts modern job ids', () => {
+  assert.match(humanizeJobRouteSource, /samples:\s*4/);
+  assert.match(humanizeJobRouteSource, /\^\[A-Za-z0-9\]\[A-Za-z0-9_-\]\{5,127\}\$/);
+});
+
+test('rudra polling fails fast on non-ok status responses', () => {
+  assert.match(humanizerSource, /if \(!stResp\.ok \|\| stData\?\.success === false\)/);
+  assert.match(humanizerSource, /Job status failed \(HTTP \$\{stResp\.status\}\)/);
 });
