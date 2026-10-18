@@ -124,8 +124,8 @@ describe("StealthHumanizer CLI", () => {
 
     assertSuccess(result);
     assert.match(result.stdout, /Provider\s+Free\s+Env var\s+Default model\s+Name/);
-    assert.match(result.stdout, /gemini\s+yes\s+GEMINI_API_KEY\s+gemini-2\.5-flash/);
-    assert.match(result.stdout, /openai\s+no\s+OPENAI_API_KEY\s+gpt-5-mini/);
+    assert.match(result.stdout, /gemini\s+yes\s+GEMINI_API_KEY\s+gemini-3\.5-flash-lite/);
+    assert.match(result.stdout, /openai\s+no\s+OPENAI_API_KEY\s+gpt-6-luna/);
     assert.match(result.stdout, /claude-code\s+yes\s+\(cli\)/);
     assert.match(result.stdout, /codex\s+yes\s+\(cli\)/);
     assert.equal(result.stderr, "");
@@ -142,7 +142,7 @@ describe("StealthHumanizer CLI", () => {
     assert.ok(providers.length >= 10);
     assert.equal(gemini.env, "GEMINI_API_KEY");
     assert.equal(gemini.free, true);
-    assert.equal(gemini.defaultModel, "gemini-2.5-flash");
+    assert.equal(gemini.defaultModel, "gemini-3.5-flash-lite");
     assert.equal(openai.free, false);
     assert.equal(Object.hasOwn(gemini, "getApiKeyUrl"), true);
     assert.equal(claudeCode.cliOnly, true);
@@ -444,7 +444,7 @@ describe("StealthHumanizer CLI", () => {
     assert.ok(first.argv[outputFlagIdx + 1], "must follow -o with a path");
     const modelFlagIdx = first.argv.indexOf("--model");
     assert.ok(modelFlagIdx >= 0, "must pass --model");
-    assert.equal(first.argv[modelFlagIdx + 1], "gpt-5.5");
+    assert.equal(first.argv[modelFlagIdx + 1], "gpt-6.1-sol");
     // Privacy: the prompt (system + user document) must travel via stdin, NOT
     // argv — argv is visible in process listings and capped by ARG_MAX.
     assert.ok(

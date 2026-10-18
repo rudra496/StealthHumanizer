@@ -5,6 +5,48 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed — current models for every provider
+
+Model lists and defaults now point at models that exist as of October 2026
+(checked against each provider's docs or public model list). Retired IDs that
+returned 404s are gone: Gemini 2.0, Cerebras Llama 3.1, DeepInfra/NVIDIA Llama 3,
+Groq Compound, Mistral Nemo, Cohere `command-light`, the old Cloudflare Llama 3
+models, and Fireworks' placeholder `default`.
+
+New defaults: OpenAI `gpt-6-luna`, Claude `claude-sonnet-5-5` (Opus 5.5 stays
+available in the list; the default rewrite model shouldn't be the flagship),
+Gemini `gemini-3.5-flash-lite`, Mistral `mistral-small-latest`,
+Together/OpenRouter DeepSeek V4.1 Flash, Cerebras `qwen-3.8-27b`, Z.ai
+`glm-5.3-flash`, Codex CLI `gpt-6.1-sol` (GPT-5.5 left Codex for ChatGPT
+sign-in on 2026-10-14).
+
+### Fixed
+
+- OpenAI GPT-5/6 and o-series: send `max_completion_tokens` and the lowest
+  `reasoning_effort` each model accepts; only send temperature/top_p when
+  reasoning is `none`.
+- Claude Opus 4.7+, Sonnet/Haiku 5.x: drop temperature/top_p (rejected) and use
+  `output_config.effort: low`; older Claude models get temperature only. A
+  `refusal` stop reason now raises instead of returning empty text.
+- Gemini 3.x/4: use `thinkingLevel` instead of `thinkingBudget`, and stop
+  sending ignored sampling params.
+- Reasoning-by-default open models (Qwen 3.x, DeepSeek V4, GLM 5, gpt-oss,
+  Gemma 4) get each host's switch to turn reasoning off or down, plus output
+  headroom where it can't be turned off.
+- HuggingFace moved to `router.huggingface.co` (the old Inference API host no
+  longer resolves). Cloudflare uses the Workers AI OpenAI-compatible endpoint,
+  so every text model's reply parses. Cohere moved to Chat v2.
+- OpenCode moved to the `/inference/...` base URLs; OpenCode Go requests send the
+  required `x-opencode-session` header.
+- The fetch host allowlist (and CSP `connect-src`) was missing Perplexity,
+  Fireworks, NVIDIA NIM, OpenCode, Codebuff, Command Code and other configured
+  providers, so their requests failed before being sent.
+- Per-host request tweaks (Groq token caps, OpenAI reasoning params, Cerebras
+  token param, OpenRouter referer) now match the exact URL hostname instead of
+  substring checks (CodeQL js/incomplete-url-substring-sanitization).
+
 ## [2.4.2] - 2026-07-04
 
 ### Changed — sub-1B specialized humanizer for short text

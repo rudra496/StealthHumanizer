@@ -103,13 +103,13 @@ All providers use the same request format. Keys are passed from the client in ea
 | Claude | `api.anthropic.com/v1` | Anthropic API |
 | Groq | `api.groq.com/openai/v1` | OpenAI-compatible |
 | Mistral | `api.mistral.ai/v1` | OpenAI-compatible |
-| Cohere | `api.cohere.ai/v1` | Cohere API |
+| Cohere | `api.cohere.ai/v2` | Cohere Chat v2 |
 | Together | `api.together.xyz/v1` | OpenAI-compatible |
 | OpenRouter | `openrouter.ai/api/v1` | OpenAI-compatible |
 | Cerebras | `api.cerebras.ai/v1` | OpenAI-compatible |
 | DeepInfra | `api.deepinfra.com/v1/openai` | OpenAI-compatible |
-| HuggingFace | `api-inference.huggingface.co` | HF Inference API |
-| Cloudflare | `api.cloudflare.com/client/v4` | Workers AI |
+| HuggingFace | `router.huggingface.co/v1` | OpenAI-compatible (Inference Providers) |
+| Cloudflare | `api.cloudflare.com/client/v4/accounts/{id}/ai/v1` | OpenAI-compatible (Workers AI) |
 
 ### Adding a Custom Provider
 

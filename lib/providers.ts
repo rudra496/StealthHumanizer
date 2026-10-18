@@ -19,7 +19,11 @@ const ALLOWED_HOSTS = new Set([
   'api.openai.com', 'api.anthropic.com', 'generativelanguage.googleapis.com',
   'api.mistral.ai', 'api.cohere.ai', 'api.groq.com', 'api.together.xyz',
   'openrouter.ai', 'api.deepinfra.com', 'api.cloudflare.com',
-  'api.gptzero.me', 'api.z.ai',
+  'api.gptzero.me', 'api.z.ai', 'router.huggingface.co', 'api.cerebras.ai',
+  'opencode.ai', 'crof.ai', 'global.ocenza.com', 'token-plan-sgp.xiaomimimo.com',
+  'integrate.api.nvidia.com', 'api.kilo.ai', 'inference-api.nousresearch.com',
+  'api.perplexity.ai', 'api.fireworks.ai', 'api.openadapter.in',
+  'www.codebuff.com', 'api.commandcode.ai', 'cloudcode-pa.googleapis.com',
 ]);
 
 // Local inference endpoints (Ollama, LM Studio, vLLM) listen on plain http over
@@ -51,25 +55,6 @@ function sanitizeGeminiModel(model: string): string {
   // Restrict to safe characters so user input cannot alter URL structure.
   if (!/^[A-Za-z0-9._-]+$/.test(trimmed)) {
     throw new Error('Invalid Gemini model identifier');
-  }
-  return trimmed;
-}
-
-function sanitizeHuggingFaceModel(model: string): string {
-  const trimmed = model.trim();
-  // Expected HuggingFace model IDs look like "org/model-name".
-  // Allow only safe path characters and reject traversal/URL delimiters.
-  if (!/^[A-Za-z0-9._/-]+$/.test(trimmed)) {
-    throw new Error('Invalid HuggingFace model identifier');
-  }
-  if (
-    trimmed.length === 0 ||
-    trimmed.includes('..') ||
-    trimmed.startsWith('/') ||
-    trimmed.endsWith('/') ||
-    trimmed.includes('\\')
-  ) {
-    throw new Error('Invalid HuggingFace model identifier');
   }
   return trimmed;
 }
@@ -157,20 +142,27 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
     getApiKeyUrl: 'https://aistudio.google.com/apikey',
     docsUrl: 'https://ai.google.dev/docs',
-    defaultModel: 'gemini-2.5-flash',
-    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'],
+    defaultModel: 'gemini-3.5-flash-lite',
+    models: [
+      'gemini-3.8-flash',
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-flash-lite',
+      'gemini-4-argon',
+      'gemini-2.5-flash',
+    ],
     placeholder: 'AIza...',
   },
   {
     id: 'openai',
-    name: 'OpenAI GPT-4',
+    name: 'OpenAI GPT',
     description: 'Industry-leading AI, excellent quality for complex texts',
     free: false,
     apiUrl: 'https://api.openai.com/v1/chat/completions',
     getApiKeyUrl: 'https://platform.openai.com/api-keys',
-    docsUrl: 'https://platform.openai.com/docs',
-    defaultModel: 'gpt-5-mini',
-    models: ['gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4o', 'gpt-4o-mini'],
+    docsUrl: 'https://developers.openai.com/api/docs/models',
+    defaultModel: 'gpt-6-luna',
+    models: ['gpt-6-luna', 'gpt-6-sol', 'gpt-6.1-sol', 'gpt-6-astra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5-mini', 'gpt-4o'],
     placeholder: 'sk-...',
   },
   {
@@ -181,8 +173,8 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://api.anthropic.com/v1/messages',
     getApiKeyUrl: 'https://console.anthropic.com/',
     docsUrl: 'https://docs.anthropic.com',
-    defaultModel: 'claude-sonnet-4-5',
-    models: ['claude-sonnet-4-5', 'claude-sonnet-4-20250514', 'claude-haiku-4-5', 'claude-3-5-sonnet-20241022'],
+    defaultModel: 'claude-sonnet-5-5',
+    models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
     placeholder: 'sk-ant-...',
   },
   {
@@ -194,7 +186,11 @@ export const PROVIDERS: Provider[] = [
     getApiKeyUrl: 'https://console.groq.com/keys',
     docsUrl: 'https://console.groq.com/docs',
     defaultModel: 'qwen/qwen3.8-27b',
-    models: ['qwen/qwen3.8-27b', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'groq/compound-mini'],
+    models: [
+      'qwen/qwen3.8-27b',
+      'openai/gpt-oss-20b',
+      'openai/gpt-oss-120b',
+    ],
     placeholder: 'gsk_...',
   },
   {
@@ -205,8 +201,15 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://api.mistral.ai/v1/chat/completions',
     getApiKeyUrl: 'https://console.mistral.ai/',
     docsUrl: 'https://docs.mistral.ai',
-    defaultModel: 'mistral-large-latest',
-    models: ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'mistral-nemo'],
+    defaultModel: 'mistral-small-latest',
+    models: [
+      'mistral-large-4-0',
+      'mistral-medium-latest',
+      'mistral-large-latest',
+      'mistral-small-latest',
+      'ministral-3-14b-25-12',
+      'ministral-3-8b-25-12',
+    ],
     placeholder: '...',
   },
   {
@@ -214,11 +217,18 @@ export const PROVIDERS: Provider[] = [
     name: 'Cohere',
     description: 'Enterprise-focused AI with strong language understanding. Free tier.',
     free: true,
-    apiUrl: 'https://api.cohere.ai/v1/chat',
+    apiUrl: 'https://api.cohere.ai/v2/chat',
     getApiKeyUrl: 'https://dashboard.cohere.com/api-keys',
     docsUrl: 'https://docs.cohere.com',
     defaultModel: 'command-a-03-2025',
-    models: ['command-a-03-2025', 'command-r-plus', 'command-r', 'command-light'],
+    models: [
+      'command-a-03-2025',
+      'command-a-plus-05-2026',
+      'command-a-reasoning-08-2025',
+      'command-r-plus-08-2024',
+      'command-r-08-2024',
+      'command-r7b-12-2024',
+    ],
     placeholder: '...',
   },
   {
@@ -229,12 +239,14 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://api.together.xyz/v1/chat/completions',
     getApiKeyUrl: 'https://api.together.xyz/settings/api-keys',
     docsUrl: 'https://docs.together.ai',
-    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    defaultModel: 'deepseek-ai/DeepSeek-V4.1-Flash',
     models: [
-      'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-      'meta-llama/Llama-3-70b-chat-hf',
-      'Qwen/Qwen2.5-72B-Instruct-Turbo',
-      'mistralai/Mixtral-8x7B-Instruct-v0.1',
+      'deepseek-ai/DeepSeek-V4.1-Flash',
+      'meta-models/Muse-Glimmer-30B',
+      'zai-org/GLM-5.3-Flash',
+      'openai/gpt-oss-120b',
+      'Qwen/Qwen3.8-Flash',
+      'Qwen/Qwen3.5-9B',
     ],
     placeholder: '...',
   },
@@ -246,14 +258,15 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://openrouter.ai/api/v1/chat/completions',
     getApiKeyUrl: 'https://openrouter.ai/keys',
     docsUrl: 'https://openrouter.ai/docs',
-    defaultModel: 'meta-llama/llama-3.3-70b-instruct',
+    defaultModel: 'deepseek/deepseek-v4.1-flash',
     models: [
+      'deepseek/deepseek-v4.1-flash',
       'meta-llama/llama-3.3-70b-instruct',
-      'meta-llama/llama-3.1-8b-instruct',
+      'mistralai/mistral-small-3.2-24b-instruct',
+      'google/gemini-3.1-flash-lite',
       'google/gemma-4-31b-it:free',
       'nvidia/nemotron-3-super-120b-a12b:free',
-      'google/gemini-2.5-flash',
-      'openai/gpt-4o',
+      'nvidia/nemotron-3.5-lightning:free',
     ],
     placeholder: 'sk-or-...',
   },
@@ -265,8 +278,11 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://api.cerebras.ai/v1/chat/completions',
     getApiKeyUrl: 'https://cloud.cerebras.ai/',
     docsUrl: 'https://inference-docs.cerebras.ai',
-    defaultModel: 'llama3.1-70b',
-    models: ['llama3.1-70b', 'llama3.1-8b'],
+    defaultModel: 'qwen-3.8-27b',
+    models: [
+      'qwen-3.8-27b',
+      'gpt-oss-120b',
+    ],
     placeholder: '...',
   },
   {
@@ -277,12 +293,13 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://api.deepinfra.com/v1/openai/chat/completions',
     getApiKeyUrl: 'https://deepinfra.com/dash/api_keys',
     docsUrl: 'https://deepinfra.com/docs',
-    defaultModel: 'meta-llama/Meta-Llama-3-70B-Instruct',
+    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
     models: [
-      'meta-llama/Meta-Llama-3-70B-Instruct',
-      'meta-llama/Meta-Llama-3-8B-Instruct',
-      'mistralai/Mixtral-8x7B-Instruct-v0.1',
-      'Qwen/Qwen2-72B-Instruct',
+      'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+      'deepseek-ai/DeepSeek-V4.1-Flash',
+      'google/gemma-4-31B-it',
+      'deepseek-ai/DeepSeek-V3.2',
+      'mistralai/Mistral-Small-3.2-24B-Instruct-2506',
     ],
     placeholder: '...',
   },
@@ -294,8 +311,15 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://api.z.ai/api/paas/v4/chat/completions',
     getApiKeyUrl: 'https://z.ai/manage-apikey/apikey-list',
     docsUrl: 'https://docs.z.ai/api-reference/introduction',
-    defaultModel: 'glm-5',
-    models: ['glm-5', 'glm-5-turbo', 'glm-5-plus'],
+    defaultModel: 'glm-5.3-flash',
+    models: [
+      'glm-5.3-flash',
+      'glm-5.3',
+      'glm-5.2',
+      'glm-5.1',
+      'glm-5',
+      'glm-4.7',
+    ],
     placeholder: '...',
   },
   {
@@ -303,14 +327,16 @@ export const PROVIDERS: Provider[] = [
     name: 'HuggingFace',
     description: 'Free inference API for open-source models. Rate limited.',
     free: true,
-    apiUrl: 'https://api-inference.huggingface.co/models',
+    apiUrl: 'https://router.huggingface.co/v1/chat/completions',
     getApiKeyUrl: 'https://huggingface.co/settings/tokens',
-    docsUrl: 'https://huggingface.co/docs/api-inference',
-    defaultModel: 'meta-llama/Meta-Llama-3-8B-Instruct',
+    docsUrl: 'https://huggingface.co/docs/inference-providers',
+    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct',
     models: [
-      'meta-llama/Meta-Llama-3-8B-Instruct',
-      'mistralai/Mistral-7B-Instruct-v0.3',
-      'microsoft/Phi-3-mini-4k-instruct',
+      'meta-llama/Llama-3.3-70B-Instruct',
+      'google/gemma-4-26B-A4B-it',
+      'Qwen/Qwen3-4B-Instruct-2507',
+      'meta-llama/Llama-3.1-8B-Instruct',
+      'openai/gpt-oss-20b',
     ],
     placeholder: 'hf_...',
   },
@@ -319,14 +345,16 @@ export const PROVIDERS: Provider[] = [
     name: 'Cloudflare Workers AI',
     description: 'Edge inference with various models. Free tier.',
     free: true,
-    apiUrl: 'https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run',
+    apiUrl: 'https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1/chat/completions',
     getApiKeyUrl: 'https://dash.cloudflare.com/',
     docsUrl: 'https://developers.cloudflare.com/workers-ai',
-    defaultModel: '@cf/meta/llama-3-8b-instruct',
+    defaultModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     models: [
-      '@cf/meta/llama-3-8b-instruct',
-      '@cf/mistral/mistral-7b-instruct-v0.1',
-      '@cf/qwen/qwen1.5-14b-chat-awq',
+      '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      '@cf/meta/llama-3.1-8b-instruct-fp8',
+      '@cf/mistralai/mistral-small-3.1-24b-instruct',
+      '@cf/meta/llama-4-scout-17b-16e-instruct',
+      '@cf/meta/llama-3.2-3b-instruct',
     ],
     placeholder: '...',
   },
@@ -340,11 +368,11 @@ export const PROVIDERS: Provider[] = [
     getApiKeyUrl: 'https://docs.claude.com/en/docs/claude-code/overview',
     docsUrl: 'https://docs.claude.com/en/docs/claude-code/cli-reference',
     // 'opus' / 'sonnet' / 'haiku' are aliases the claude CLI resolves to the
-    // latest version in each family (currently Opus 4.7, Sonnet 4.6, Haiku 4.5).
+    // latest version in each family (currently Opus 5.5, Sonnet 5.5, Haiku 5.5).
     // Prefer aliases so this default stays correct as Anthropic ships new
     // versions without requiring a registry bump.
     defaultModel: 'opus',
-    models: ['opus', 'sonnet', 'haiku', 'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+    models: ['opus', 'sonnet', 'haiku', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'],
     placeholder: '',
   },
   {
@@ -383,11 +411,20 @@ export const PROVIDERS: Provider[] = [
     name: 'OpenCode Zen',
     description: 'Free AI model inference via OpenCode Zen gateway.',
     free: true,
-    apiUrl: 'https://opencode.ai/zen/v1/chat/completions',
+    apiUrl: 'https://opencode.ai/inference/openai/v1/chat/completions',
     getApiKeyUrl: 'https://opencode.ai',
     docsUrl: 'https://opencode.ai',
-    defaultModel: 'gemini-3.5-flash',
-    models: ['glm-5.1', 'glm-5', 'kimi-k2.6', 'minimax-m2.7', 'gemini-3.5-flash', 'gemini-3.1-pro'],
+    defaultModel: 'glm-5.3-flash',
+    models: [
+      'glm-5.3-flash',
+      'glm-5.3',
+      'deepseek-v4.1-flash',
+      'deepseek-v4-pro',
+      'kimi-k3',
+      'minimax-m3',
+      'mistral-large-4',
+      'qwen3.8-max',
+    ],
     placeholder: 'zen_...',
   },
   {
@@ -395,11 +432,19 @@ export const PROVIDERS: Provider[] = [
     name: 'OpenCode Go',
     description: 'Paid/dedicated OpenCode Go gateway.',
     free: false,
-    apiUrl: 'https://opencode.ai/zen/go/v1/chat/completions',
+    apiUrl: 'https://opencode.ai/inference/go/openai/v1/chat/completions',
     getApiKeyUrl: 'https://opencode.ai',
     docsUrl: 'https://opencode.ai',
-    defaultModel: 'deepseek-v4-flash',
-    models: ['glm-5.1', 'mimo-v2-omni', 'qwen3.7-max', 'deepseek-v4-pro', 'deepseek-v4-flash'],
+    defaultModel: 'glm-5.3-flash',
+    models: [
+      'glm-5.3-flash',
+      'glm-5.3',
+      'deepseek-v4.1-flash',
+      'deepseek-v4-pro',
+      'kimi-k3',
+      'mimo-v2.6-flash',
+      'mimo-v2.6-pro',
+    ],
     placeholder: 'go_...',
   },
   {
@@ -446,8 +491,12 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://integrate.api.nvidia.com/v1/chat/completions',
     getApiKeyUrl: 'https://integrate.api.nvidia.com',
     docsUrl: 'https://integrate.api.nvidia.com',
-    defaultModel: 'meta/llama3-70b-instruct',
-    models: ['meta/llama3-70b-instruct'],
+    defaultModel: 'google/gemma-4-31b-it',
+    models: [
+      'google/gemma-4-31b-it',
+      'deepseek-ai/deepseek-v4.1-flash',
+      'openai/gpt-oss-20b',
+    ],
     placeholder: 'nv_...',
   },
   {
@@ -494,8 +543,11 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://api.fireworks.ai/inference/v1/chat/completions',
     getApiKeyUrl: 'https://api.fireworks.ai',
     docsUrl: 'https://api.fireworks.ai',
-    defaultModel: 'default',
-    models: ['default'],
+    defaultModel: 'accounts/fireworks/models/glm-5p3-flash',
+    models: [
+      'accounts/fireworks/models/glm-5p3-flash',
+      'accounts/fireworks/models/kimi-k3',
+    ],
     placeholder: 'fw_...',
   },
   {
@@ -518,8 +570,11 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'https://api.z.ai/api/coding/paas/v4/chat/completions',
     getApiKeyUrl: 'https://z.ai',
     docsUrl: 'https://z.ai',
-    defaultModel: 'glm-5.1',
-    models: ['glm-5.1', 'glm-4.7', 'GLM-4-Plus'],
+    defaultModel: 'glm-5.3-flash',
+    models: [
+      'glm-5.3-flash',
+      'glm-5.3',
+    ],
     placeholder: 'zai_...',
   },
   {
@@ -529,8 +584,14 @@ export const PROVIDERS: Provider[] = [
     free: true,
     apiUrl: 'https://cloudcode-pa.googleapis.com/v1internal:generateContent',
     getApiKeyUrl: 'https://aistudio.google.com/apikey',
-    defaultModel: 'gemini-2.5-flash',
-    models: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+    defaultModel: 'gemini-3.1-flash-lite',
+    models: [
+      'gemini-3.1-flash-lite',
+      'gemini-3-flash',
+      'gemini-3.1-pro-preview',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+    ],
     placeholder: 'ya29....',
   },
   {
@@ -541,7 +602,17 @@ export const PROVIDERS: Provider[] = [
     apiUrl: 'http://localhost:11434/v1/chat/completions',
     getApiKeyUrl: 'http://localhost:11434',
     defaultModel: 'gemma3:4b',
-    models: ['gemma3:4b', 'gemma3:1b', 'qwen2.5:3b', 'qwen2.5:1.5b', 'llama3.3', 'llama3.1', 'mistral', 'phi3', 'deepseek-coder'],
+    models: [
+      'gemma3:4b',
+      'gemma4:e4b',
+      'gemma4:e2b',
+      'qwen3.5:4b',
+      'qwen3.5:9b',
+      'llama3.2:3b',
+      'ministral-3:8b',
+      'phi4-mini:3.8b',
+      'gemma3:1b',
+    ],
     placeholder: 'ollama',
   },
   {
@@ -571,18 +642,16 @@ export const PROVIDERS: Provider[] = [
     name: 'OpenCode Zen (Anthropic)',
     description: 'Anthropic-compatible endpoint for OpenCode Zen.',
     free: true,
-    apiUrl: 'https://opencode.ai/zen/v1/messages',
+    apiUrl: 'https://opencode.ai/inference/anthropic/v1/messages',
     getApiKeyUrl: 'https://opencode.ai',
-    defaultModel: 'claude-sonnet-4-6',
+    defaultModel: 'claude-haiku-5-5',
     models: [
-      'claude-opus-4-7',
-      'claude-opus-4-6',
-      'claude-opus-4-5',
-      'claude-opus-4-1',
+      'claude-haiku-5-5',
+      'claude-sonnet-5-5',
+      'claude-opus-5-5',
       'claude-sonnet-4-6',
-      'claude-sonnet-4-5',
-      'claude-sonnet-4',
       'claude-haiku-4-5',
+      'qwen3.8-flash',
     ],
     placeholder: 'zen_...',
   },
@@ -591,10 +660,15 @@ export const PROVIDERS: Provider[] = [
     name: 'OpenCode Go (Anthropic)',
     description: 'Anthropic-compatible paid gateway for OpenCode Go.',
     free: false,
-    apiUrl: 'https://opencode.ai/zen/go/v1/messages',
+    apiUrl: 'https://opencode.ai/inference/go/anthropic/v1/messages',
     getApiKeyUrl: 'https://opencode.ai',
-    defaultModel: 'minimax-m2.7',
-    models: ['minimax-m2.7', 'minimax-m2.5'],
+    defaultModel: 'minimax-m3',
+    models: [
+      'minimax-m3',
+      'claude-haiku-5-5',
+      'qwen3.8-max',
+      'qwen3.8-flash',
+    ],
     placeholder: 'go_...',
   },
   {
@@ -606,8 +680,9 @@ export const PROVIDERS: Provider[] = [
     apiUrl: '',
     getApiKeyUrl: 'https://github.com/openai/codex',
     docsUrl: 'https://github.com/openai/codex#readme',
-    defaultModel: 'gpt-5.5',
-    models: ['gpt-5.5', 'gpt-5-codex', 'gpt-5', 'o4-mini'],
+    // GPT-5.5 retired from Codex for ChatGPT sign-in on 2026-10-14.
+    defaultModel: 'gpt-6.1-sol',
+    models: ['gpt-6.1-sol', 'gpt-6-luna'],
     placeholder: '',
   },
 ];
@@ -664,16 +739,94 @@ interface GenerationOptions {
   model?: string;
 }
 
+// OpenAI's GPT-5+ and o-series are reasoning models. Pick the lightest effort
+// each one accepts — humanization is a single-pass rewrite. Returns null for
+// non-reasoning models (gpt-4o etc.), which take no reasoning_effort.
+// "none" is documented for the GPT-6 family (except Astra and 6.1 Sol); the
+// GPT-5 family's lowest documented effort is "minimal".
+function openAIReasoningEffort(model: string): 'none' | 'minimal' | 'low' | null {
+  if (/^gpt-6-astra|^gpt-6\.1-sol/.test(model)) return 'low';
+  if (/^gpt-6/.test(model)) return 'none';
+  if (/^gpt-5/.test(model)) return 'minimal';
+  if (/^o\d/.test(model)) return 'low';
+  return null;
+}
+
+interface RequestExtras {
+  body?: Record<string, unknown>;
+  headers?: Record<string, string>;
+  // Set when reasoning can't be fully turned off: reasoning tokens count
+  // against the output limit, so the request needs extra room for them.
+  reasoningHeadroom?: boolean;
+}
+
+// Most current open-weight models (Qwen 3.x, DeepSeek V4, GLM 5, gpt-oss,
+// Gemma 4) reason by default. Humanization is a single-pass rewrite, so turn
+// reasoning off where the host allows it, or down to its lowest level where it
+// can't be disabled. Each host spells this differently.
+function hostReasoningParams(provider: ModelProvider, model: string): RequestExtras {
+  const lowGptOss = { body: { reasoning_effort: 'low' }, reasoningHeadroom: true };
+  const lowGlm53 = { body: { reasoning_effort: 'low' }, reasoningHeadroom: true };
+  switch (provider) {
+    case 'groq':
+      if (/gpt-oss/.test(model)) return { body: { reasoning_effort: 'low', include_reasoning: false }, reasoningHeadroom: true };
+      if (/qwen3/.test(model)) return { body: { reasoning_effort: 'none' } };
+      return {};
+    case 'cerebras':
+      if (/gpt-oss/.test(model)) return lowGptOss;
+      if (/qwen/.test(model)) return { body: { reasoning_effort: 'none' } };
+      return {};
+    case 'mistral':
+      // Small 4, Medium 3.5 and Large 4 are hybrid reasoning models.
+      return /^mistral-(small|medium)|^mistral-large-4/.test(model) ? { body: { reasoning_effort: 'none' } } : {};
+    case 'together':
+      if (/gpt-oss/.test(model)) return lowGptOss;
+      if (/GLM-5\.3/i.test(model)) return lowGlm53;
+      if (/DeepSeek-V4|Qwen3\.5/i.test(model)) return { body: { reasoning: { enabled: false } } };
+      return {};
+    case 'openrouter':
+      return /^(deepseek|qwen)\//.test(model) ? { body: { reasoning: { effort: 'none' } } } : {};
+    case 'fireworks':
+      if (/gpt-oss/.test(model)) return lowGptOss;
+      if (/glm-5p3/.test(model)) return lowGlm53;
+      if (/deepseek/.test(model)) return { body: { reasoning_effort: 'none' } };
+      return {};
+    case 'nvidia-nim':
+      return /glm-5\.3/.test(model) ? lowGlm53 : {};
+    case 'zai':
+    case 'zai-coding':
+      // GLM-5.3 thinking can't be disabled; older GLM models can turn it off.
+      return /^glm-5\.3/.test(model) ? lowGlm53 : { body: { thinking: { type: 'disabled' } } };
+    case 'ollama':
+      return /^(gemma4|qwen3)/.test(model) ? { body: { reasoning_effort: 'none' } } : {};
+    default:
+      return {};
+  }
+}
+
 // Generic OpenAI-compatible fetch (used by Groq, Together, OpenRouter, DeepInfra, Cerebras)
+// Exact-host checks only: substring matching like apiUrl.includes('groq.com')
+// accepts attacker-shaped URLs where "groq.com" appears anywhere
+// (CodeQL js/incomplete-url-substring-sanitization).
+function apiUrlHost(apiUrl: string): string {
+  try {
+    return new URL(apiUrl).hostname;
+  } catch {
+    return '';
+  }
+}
+
 async function openAICompatibleGenerate(
   apiUrl: string,
   apiKey: string,
   systemPrompt: string,
   userPrompt: string,
   model: string,
-  options: GenerationOptions = {}
+  options: GenerationOptions = {},
+  extras: RequestExtras = {}
 ): Promise<string> {
-  const isGroq = apiUrl.includes('groq.com');
+  const apiHost = apiUrlHost(apiUrl);
+  const isGroq = apiHost === 'api.groq.com';
   const estimatedInputTokens = Math.ceil((userPrompt.length + systemPrompt.length) / 3);
 
   // Groq free tier enforces a strict 1000 Output Tokens Per Minute (OTPM) limit per request.
@@ -688,12 +841,27 @@ async function openAICompatibleGenerate(
     maxTokens = 4096;
   }
 
+  // OpenAI reasoning models reject max_tokens, and reject temperature/top_p
+  // unless reasoning effort is 'none'. Reasoning tokens also count against
+  // max_completion_tokens, so give non-'none' efforts headroom to avoid an
+  // empty reply cut off at finish_reason "length".
+  const effort = apiHost === 'api.openai.com' ? openAIReasoningEffort(model) : null;
+  const allowSampling = effort === null || effort === 'none';
+  if (!allowSampling || extras.reasoningHeadroom) {
+    maxTokens += isGroq ? 1024 : 4096;
+  }
+  // Cerebras also wants max_completion_tokens.
+  const tokenParams = apiHost === 'api.openai.com' || apiHost === 'api.cerebras.ai'
+    ? { max_completion_tokens: maxTokens }
+    : { max_tokens: maxTokens };
+
   const response = await fetchWithRetry(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
-      ...(apiUrl.includes('openrouter') && { 'HTTP-Referer': 'https://stealthhumanizer.app' }),
+      ...(apiHost === 'openrouter.ai' && { 'HTTP-Referer': 'https://stealthhumanizer.app' }),
+      ...extras.headers,
     },
     body: JSON.stringify({
       model,
@@ -701,9 +869,13 @@ async function openAICompatibleGenerate(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: options.temperature ?? 0.9,
-      top_p: options.topP ?? 0.95,
-      max_tokens: maxTokens,
+      ...(allowSampling && {
+        temperature: options.temperature ?? 0.9,
+        top_p: options.topP ?? 0.95,
+      }),
+      ...(effort && { reasoning_effort: effort }),
+      ...extras.body,
+      ...tokenParams,
     }),
   });
 
@@ -714,7 +886,41 @@ async function openAICompatibleGenerate(
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+  const content = data.choices?.[0]?.message?.content;
+  // Hybrid reasoning models (e.g. Mistral) can return content as a list of
+  // thinking + text chunks instead of a string.
+  if (Array.isArray(content)) {
+    return content
+      .filter((c: { type?: string }) => c.type === 'text')
+      .map((c: { text?: string }) => c.text || '')
+      .join('');
+  }
+  return content || '';
+}
+
+// Gemini 2.5 models are "thinking" models: with the default reasoning budget
+// they can spend 30-60s+ thinking before the first output token, which blows
+// through the fetch timeout and the Vercel function clamp. Humanization is a
+// single-pass rewrite — no multi-step reasoning needed — so keep thinking as
+// low as each model allows. 2.5 Flash/Flash-Lite take thinkingBudget 0 (2.5 Pro
+// can't disable thinking). Gemini 3.x and 4 can't turn thinking off and take
+// thinkingLevel instead; 3.8 Flash, 4 and the 3.1 Pro preview reject 'minimal'.
+// Sending thinkingBudget and thinkingLevel together is a 400.
+function geminiThinkingConfig(model: string): Record<string, unknown> | undefined {
+  if (/^gemini-2\.5-flash/.test(model)) return { thinkingBudget: 0 };
+  if (/^gemini-(4|3\.8)|^gemini-3\.1-pro/.test(model)) return { thinkingLevel: 'low' };
+  if (/^gemini-3/.test(model)) return { thinkingLevel: 'minimal' };
+  return undefined;
+}
+
+// Gemini 3 and later ignore temperature/topP/topK (deprecated, slated to become
+// a 400), so only send sampling params to Gemini 2.x.
+function geminiSamplingConfig(model: string, options: GenerationOptions): Record<string, unknown> {
+  if (!/^gemini-2\./.test(model)) return {};
+  return {
+    ...(options.temperature !== undefined && { temperature: options.temperature }),
+    ...(options.topP !== undefined && { topP: options.topP }),
+  };
 }
 
 // Gemini API (uses SDK pattern but with fetch)
@@ -728,12 +934,7 @@ async function geminiGenerate(
   const safeModel = encodeURIComponent(sanitizeGeminiModel(model));
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${safeModel}:generateContent?key=${apiKey}`;
 
-  // Gemini 2.5 models are "thinking" models: with the default reasoning budget
-  // they can spend 30-60s+ thinking before the first output token, which blows
-  // through the fetch timeout and the Vercel function clamp. Humanization is a
-  // single-pass rewrite — no multi-step reasoning needed — so disable thinking
-  // for fast, reliable responses.
-  const needsThinkingConfig = /^gemini-2\.5/.test(safeModel);
+  const thinkingConfig = geminiThinkingConfig(safeModel);
   const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -746,11 +947,13 @@ async function geminiGenerate(
         parts: [{ text: userPrompt }]
       }],
       generationConfig: {
-        temperature: options.temperature ?? 0.9,
-        topK: 40,
-        topP: options.topP ?? 0.95,
+        ...geminiSamplingConfig(safeModel, {
+          temperature: options.temperature ?? 0.9,
+          topP: options.topP ?? 0.95,
+        }),
+        ...(/^gemini-2\./.test(safeModel) && { topK: 40 }),
         maxOutputTokens: options.maxTokens ?? 8192,
-        ...(needsThinkingConfig && { thinkingConfig: { thinkingBudget: 0 } }),
+        ...(thinkingConfig && { thinkingConfig }),
       },
     }),
   });
@@ -779,14 +982,17 @@ async function geminiGenerate(
 }
 
 // Cohere API
+// Cohere Chat v2. Command A+ and Command A Reasoning think by default; v2 is
+// the only version that can turn that off.
 async function cohereGenerate(
   apiKey: string,
   systemPrompt: string,
   userPrompt: string,
-  model: string = 'command-r-plus',
+  model: string = 'command-a-03-2025',
   options: GenerationOptions = {}
 ): Promise<string> {
-  const response = await fetchWithRetry('https://api.cohere.ai/v1/chat', {
+  const isReasoningModel = /^command-a-(plus|reasoning)/.test(model);
+  const response = await fetchWithRetry('https://api.cohere.ai/v2/chat', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -794,11 +1000,14 @@ async function cohereGenerate(
     },
     body: JSON.stringify({
       model,
-      preamble: systemPrompt,
-      message: userPrompt,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
       temperature: options.temperature ?? 0.9,
-      p: options.topP ?? 0.95,
+      p: Math.min(options.topP ?? 0.95, 0.99),
       max_tokens: options.maxTokens ?? 4096,
+      ...(isReasoningModel && { thinking: { type: 'disabled' } }),
     }),
   });
 
@@ -808,43 +1017,8 @@ async function cohereGenerate(
   }
 
   const data = await response.json();
-  return data.text || '';
-}
-
-// HuggingFace Inference API
-async function huggingfaceGenerate(
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-  model: string = 'meta-llama/Meta-Llama-3-8B-Instruct',
-  options: GenerationOptions = {}
-): Promise<string> {
-  const safeModel = sanitizeHuggingFaceModel(model);
-  const url = `https://api-inference.huggingface.co/models/${safeModel}`;
-
-  const response = await fetchWithRetry(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      inputs: `${systemPrompt}\n\n${userPrompt}`,
-      parameters: {
-        temperature: options.temperature ?? 0.9,
-        max_new_tokens: options.maxTokens ?? 2048,
-        return_full_text: false,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || `HuggingFace API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return Array.isArray(data) ? data[0]?.generated_text || '' : data.generated_text || '';
+  const textBlock = data.message?.content?.find((c: { type?: string; text?: string }) => c.type === 'text');
+  return textBlock?.text || '';
 }
 
 // Anthropic-compatible Inference API
@@ -854,20 +1028,35 @@ async function anthropicCompatibleGenerate(
   systemPrompt: string,
   userPrompt: string,
   model: string,
-  options: GenerationOptions = {}
+  options: GenerationOptions = {},
+  extraHeaders: Record<string, string> = {}
 ): Promise<string> {
+  // Claude Opus 4.7+, Sonnet 5+, Haiku 5+ and Fable reject temperature/top_p,
+  // and some run thinking that can't be turned off — use low effort instead,
+  // with max_tokens headroom since thinking counts against it. Older Claude
+  // models reject temperature and top_p together, so send temperature only.
+  // Non-Claude models behind Anthropic-compatible proxies keep both.
+  const maxTokens = options.maxTokens ?? 4096;
+  const isClaude = model.startsWith('claude-');
+  const isModernClaude = /^claude-(opus-4-[78]|opus-5|sonnet-5|haiku-5|fable|mythos)/.test(model);
+  const samplingParams = isModernClaude
+    ? { output_config: { effort: 'low' } }
+    : isClaude
+      ? { temperature: options.temperature ?? 0.9 }
+      : { temperature: options.temperature ?? 0.9, top_p: options.topP ?? 0.95 };
+
   const response = await fetchWithRetry(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
       'anthropic-version': '2023-06-01',
+      ...extraHeaders,
     },
     body: JSON.stringify({
       model,
-      max_tokens: options.maxTokens ?? 4096,
-      temperature: options.temperature ?? 0.9,
-      top_p: options.topP ?? 0.95,
+      max_tokens: isModernClaude ? maxTokens + 4096 : maxTokens,
+      ...samplingParams,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     }),
@@ -879,6 +1068,9 @@ async function anthropicCompatibleGenerate(
   }
 
   const data = await response.json();
+  if (data.stop_reason === 'refusal') {
+    throw new Error('The model declined this request (stop_reason: refusal).');
+  }
   const textBlock = data.content?.find((b: { type?: string; text?: string }) => b.type === 'text');
   return textBlock?.text || '';
 }
@@ -888,7 +1080,7 @@ async function claudeGenerate(
   apiKey: string,
   systemPrompt: string,
   userPrompt: string,
-  model: string = 'claude-sonnet-4-20250514',
+  model: string = 'claude-sonnet-5-5',
   options: GenerationOptions = {}
 ): Promise<string> {
   return anthropicCompatibleGenerate('https://api.anthropic.com/v1/messages', apiKey, systemPrompt, userPrompt, model, options);
@@ -920,12 +1112,14 @@ async function googleOAuthGenerate(
     systemInstruction,
   };
   
-  if (options.temperature !== undefined || options.topP !== undefined || options.maxTokens !== undefined) {
-    requestBody.generationConfig = {
-      ...(options.temperature !== undefined && { temperature: options.temperature }),
-      ...(options.topP !== undefined && { topP: options.topP }),
-      ...(options.maxTokens !== undefined && { maxOutputTokens: options.maxTokens }),
-    };
+  const thinkingConfig = geminiThinkingConfig(model);
+  const generationConfig = {
+    ...geminiSamplingConfig(model, options),
+    ...(options.maxTokens !== undefined && { maxOutputTokens: options.maxTokens }),
+    ...(thinkingConfig && { thinkingConfig }),
+  };
+  if (Object.keys(generationConfig).length > 0) {
+    requestBody.generationConfig = generationConfig;
   }
   
   const wrapped: any = {
@@ -1026,6 +1220,12 @@ const CLI_RUNTIME_REQUIRED_MESSAGE =
   'CLI-runner providers (claude-code, codex) require the server runtime. ' +
   'Import generateWithProvider from "@/lib/server/providers-runtime" in server-only code.';
 
+// OpenCode Go rejects requests without a per-conversation session id
+// (400 MissingSessionID). Each humanize call is its own conversation.
+function openCodeGoHeaders(): Record<string, string> {
+  return { 'x-opencode-session': globalThis.crypto.randomUUID() };
+}
+
 export async function generateWithProvider(
   provider: ModelProvider,
   apiKey: string,
@@ -1040,6 +1240,7 @@ export async function generateWithProvider(
 
   const model = options.model || providerConfig.defaultModel;
   const fullUserPrompt = `Text to humanize:\n\n${userPrompt}`;
+  const extras = hostReasoningParams(provider, model);
 
   switch (provider) {
     case 'gemini':
@@ -1052,48 +1253,51 @@ export async function generateWithProvider(
       return cohereGenerate(apiKey, systemPrompt, fullUserPrompt, model, options);
 
     case 'huggingface':
-      return huggingfaceGenerate(apiKey, systemPrompt, fullUserPrompt, model, options);
+      return openAICompatibleGenerate(
+        'https://router.huggingface.co/v1/chat/completions',
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
+      );
 
     case 'openai':
       return openAICompatibleGenerate(
         'https://api.openai.com/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'groq':
       return openAICompatibleGenerate(
         'https://api.groq.com/openai/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'mistral':
       return openAICompatibleGenerate(
         'https://api.mistral.ai/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'together':
       return openAICompatibleGenerate(
         'https://api.together.xyz/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'openrouter':
       return openAICompatibleGenerate(
         'https://openrouter.ai/api/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'cerebras':
       return openAICompatibleGenerate(
         'https://api.cerebras.ai/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'deepinfra':
       return openAICompatibleGenerate(
         'https://api.deepinfra.com/v1/openai/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'cloudflare': {
@@ -1103,100 +1307,99 @@ export async function generateWithProvider(
       if (!/^[a-f0-9]{32}$/i.test(accountId)) {
         throw new Error('Invalid Cloudflare account ID format. Expected 32-character hexadecimal string.');
       }
-      // Validate model path segment to prevent path manipulation in URL construction.
-      // Allows common provider model ids like "@cf/meta/llama-3.1-8b-instruct" and "llama-3.1-8b".
-      if (!/^[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*$/.test(model)) {
+      // Model ids look like "@cf/meta/llama-3.3-70b-instruct-fp8-fast".
+      if (!/^@?[a-zA-Z0-9._-]+(?:\/[a-zA-Z0-9._-]+)*$/.test(model)) {
         throw new Error('Invalid Cloudflare model format.');
       }
-      const encodedModel = encodeURIComponent(model);
       return openAICompatibleGenerate(
-        `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${encodedModel}`,
-        apiToken, systemPrompt, fullUserPrompt, model, options
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1/chat/completions`,
+        apiToken, systemPrompt, fullUserPrompt, model, options, extras
       );
     }
 
     case 'zai':
       return openAICompatibleGenerate(
         'https://api.z.ai/api/paas/v4/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'opencode-zen':
       return openAICompatibleGenerate(
-        'https://opencode.ai/zen/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        'https://opencode.ai/inference/openai/v1/chat/completions',
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'opencode-go':
       return openAICompatibleGenerate(
-        'https://opencode.ai/zen/go/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        'https://opencode.ai/inference/go/openai/v1/chat/completions',
+        apiKey, systemPrompt, fullUserPrompt, model, options,
+        { ...extras, headers: openCodeGoHeaders() }
       );
 
     case 'crof':
       return openAICompatibleGenerate(
         'https://crof.ai/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'ocenza':
       return openAICompatibleGenerate(
         'https://global.ocenza.com/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'mimo':
       return openAICompatibleGenerate(
         'https://token-plan-sgp.xiaomimimo.com/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'nvidia-nim':
       return openAICompatibleGenerate(
         'https://integrate.api.nvidia.com/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'kilo-gateway':
       return openAICompatibleGenerate(
         'https://api.kilo.ai/api/gateway/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'nous-research':
       return openAICompatibleGenerate(
         'https://inference-api.nousresearch.com/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'perplexity':
       return openAICompatibleGenerate(
         'https://api.perplexity.ai/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'fireworks':
       return openAICompatibleGenerate(
         'https://api.fireworks.ai/inference/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'openadapter':
       return openAICompatibleGenerate(
         'https://api.openadapter.in/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'zai-coding':
       return openAICompatibleGenerate(
         'https://api.z.ai/api/coding/paas/v4/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'codebuff':
       return openAICompatibleGenerate(
         'https://www.codebuff.com/api/v1/chat/completions',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        apiKey, systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'command-code':
@@ -1212,31 +1415,31 @@ export async function generateWithProvider(
     case 'ollama':
       return openAICompatibleGenerate(
         'http://localhost:11434/v1/chat/completions',
-        apiKey || 'ollama', systemPrompt, fullUserPrompt, model, options
+        apiKey || 'ollama', systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'lm-studio':
       return openAICompatibleGenerate(
         'http://127.0.0.1:1234/v1/chat/completions',
-        apiKey || 'lm-studio', systemPrompt, fullUserPrompt, model, options
+        apiKey || 'lm-studio', systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'vllm':
       return openAICompatibleGenerate(
         'http://localhost:8000/v1/chat/completions',
-        apiKey || 'vllm', systemPrompt, fullUserPrompt, model, options
+        apiKey || 'vllm', systemPrompt, fullUserPrompt, model, options, extras
       );
 
     case 'opencode-zen-anthropic':
       return anthropicCompatibleGenerate(
-        'https://opencode.ai/zen/v1/messages',
+        'https://opencode.ai/inference/anthropic/v1/messages',
         apiKey, systemPrompt, fullUserPrompt, model, options
       );
 
     case 'opencode-go-anthropic':
       return anthropicCompatibleGenerate(
-        'https://opencode.ai/zen/go/v1/messages',
-        apiKey, systemPrompt, fullUserPrompt, model, options
+        'https://opencode.ai/inference/go/anthropic/v1/messages',
+        apiKey, systemPrompt, fullUserPrompt, model, options, openCodeGoHeaders()
       );
 
     case 'claude-code':
