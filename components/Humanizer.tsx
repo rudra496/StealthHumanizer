@@ -573,12 +573,17 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   const handleRehumanize = async () => {
     if (!result) return;
     const { providerId, apiKey } = getApiCredentials();
-    if (!apiKey && providerId !== 'rudra-free' && providerId !== 'pro-academic') { showToast('warning', 'No API key configured'); return; }
+    const effectiveModel = privacyMode ? 'privacy' : providerId;
+    if (!apiKey && effectiveModel !== 'rudra-free' && effectiveModel !== 'pro-academic' && effectiveModel !== 'privacy') {
+      showToast('warning', 'Please add an API key in Settings or use a free provider');
+      return;
+    }
 
     setRehumanizing(true);
     let currentFullText = result.fullText;
     let currentScore = result.finalScore;
     let round = 0;
+    let actualChanges = 0;
     const maxRounds = 3;
 
     try {
@@ -595,23 +600,28 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             flaggedSentences: flagged, style, 
-            model: providerId, apiKey, fullText: currentFullText,
+            model: effectiveModel, apiKey, fullText: currentFullText,
           }),
         });
-        if (!resp.ok) break;
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({}));
+          showToast('error', errData.error || `Server returned ${resp.status}`);
+          break;
+        }
         const data = await resp.json();
 
         const candidateText = data.fullText;
         const newDetection = detectAI(candidateText);
         const newScore = newDetection.score;
         const changed = candidateText.trim() !== currentFullText.trim();
-        if (newScore > currentScore || (newScore === currentScore && changed && data.fallbackUsed)) {
+        if (newScore > currentScore || (newScore === currentScore && changed)) {
           currentFullText = candidateText;
           currentScore = newScore;
+          actualChanges++;
         } else {
           showToast('warning', changed
-            ? `Stopped: round ${round} did not improve the score (${currentScore}% → ${newScore}%).`
-            : `Stopped: round ${round} returned no usable changes.`);
+            ? `Stopped: round ${round} reached best available score (${currentScore}% → ${newScore}%).`
+            : `Stopped: round ${round} returned no further changes.`);
           break;
         }
       }
@@ -629,7 +639,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         ...result,
         sentences,
         fullText: currentFullText,
-        passes: result.passes + round,
+        passes: result.passes + (actualChanges > 0 ? actualChanges : 0),
         finalScore: finalDetection.score,
         semanticFidelity: assessSemanticFidelity(inputText, currentFullText),
         wordCount: { ...result.wordCount, output: countWords(currentFullText) },
@@ -640,12 +650,12 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
       if (finalDetection.score < 90) {
         setShowComparison(true);
       }
-      if (finalDetection.score >= 90) {
-        showToast('success', `🎯 ${finalDetection.score}% human after ${round} round${round > 1 ? 's' : ''}!`);
-      } else if (round >= maxRounds) {
-        showToast('info', `Refined ${round} rounds → ${finalDetection.score}% human (max rounds reached).`);
+      if (actualChanges === 0) {
+        showToast('info', 'No further changes needed — text is already optimized.');
+      } else if (finalDetection.score >= 90) {
+        showToast('success', `🎯 ${finalDetection.score}% human after ${actualChanges} round${actualChanges > 1 ? 's' : ''}!`);
       } else {
-        showToast('success', `Refined ${round} round${round > 1 ? 's' : ''} → ${finalDetection.score}% human.`);
+        showToast('success', `Refined ${actualChanges} round${actualChanges > 1 ? 's' : ''} → ${finalDetection.score}% human.`);
       }
     } catch (err: any) {
       showToast('error', err.message);

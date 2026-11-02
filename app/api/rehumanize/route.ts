@@ -8,6 +8,7 @@ import { ModelProvider, StylePreset } from '@/lib/types';
 import { chooseImprovedRewrite, parseRehumanizedLines, replaceSentencesInText } from '@/lib/rehumanize';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { humanizeWithRudra } from '@/lib/server/rudra-free';
+import { refineAcademicSentences } from '@/lib/academic-inversion';
 
 const VALID_STYLES = ['academic', 'business', 'creative', 'casual', 'technical', 'humanize', 'professional'];
 
@@ -36,8 +37,9 @@ export async function POST(request: NextRequest) {
     if (!Array.isArray(flaggedSentences) || flaggedSentences.length === 0) {
       return NextResponse.json({ success: false, error: 'flaggedSentences is required' }, { status: 400 });
     }
-    if (!model || (!apiKey && model !== 'rudra-free')) {
-      return NextResponse.json({ success: false, error: 'model and apiKey are required for re-humanization' }, { status: 400 });
+    const isFreeOrLocal = model === 'rudra-free' || model === 'pro-academic' || model === 'privacy' || model === 'ollama' || model === 'lmstudio' || model === 'vllm';
+    if (!model || (!apiKey && !isFreeOrLocal)) {
+      return NextResponse.json({ success: false, error: 'API key is required for this provider' }, { status: 400 });
     }
     if (fullText && typeof fullText === 'string' && fullText.length > 50000) {
       return NextResponse.json({ success: false, error: 'fullText exceeds 50,000 character limit' }, { status: 400 });
@@ -65,12 +67,19 @@ export async function POST(request: NextRequest) {
     let usedFallback = false;
 
     try {
-      if (model === 'rudra-free') {
+      if (model === 'pro-academic') {
+        // Pro Academic Inversion path: multi-candidate nominalization de-symmetrization
+        // and cross-lingual adversarial pivot (no API key needed).
+        rawRewrites = await refineAcademicSentences(cleanFlagged, fullText);
+      } else if (model === 'rudra-free') {
         // Self-trained model path: rewrite each flagged sentence on the
         // hosted VPS ensemble (no provider API key needed).
         rawRewrites = await Promise.all(
           cleanFlagged.map(s => humanizeWithRudra(s).then(r => r.text).catch(() => '')),
         );
+      } else if (model === 'privacy') {
+        // Offline privacy mode fallback
+        rawRewrites = cleanFlagged.map((s, i) => chooseImprovedRewrite(s, undefined, i));
       } else {
         const rehumanizePrompt = getRehumanizePrompt(cleanFlagged, style || 'humanize');
         const contextPrompt = fullText
