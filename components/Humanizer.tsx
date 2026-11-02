@@ -198,10 +198,12 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     const localProviders: ModelProvider[] = ['ollama', 'lm-studio', 'vllm'];
     const hasKey = (id: string) => !!keys[id]?.trim();
     let providerId: ModelProvider;
-    // "Rudra's Free Usage Model" needs no client API key — the server uses
-    // a preconfigured env var. Always allow it as a valid pick.
+    // "Rudra's Free Usage Model" and "Stealth Pro Academic" need no client API key —
+    // they are pre-configured. Always allow them as a valid pick.
     if (preferredModel === 'rudra-free') {
       providerId = 'rudra-free';
+    } else if (preferredModel === 'pro-academic') {
+      providerId = 'pro-academic';
     } else if (hasKey(preferredModel)) {
       providerId = preferredModel;
     } else if (localProviders.includes(preferredModel)) {
@@ -211,7 +213,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     }
     const apiKey =
       keys[providerId]?.trim() ||
-      (providerId === 'rudra-free'
+      (providerId === 'rudra-free' || providerId === 'pro-academic'
         ? 'pre-configured'
         : localProviders.includes(providerId)
           ? (PROVIDERS.find(p => p.id === providerId)?.placeholder || 'ollama')
@@ -274,7 +276,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     }
 
     const { providerId, apiKey } = getApiCredentials();
-    if (!apiKey && providerId !== 'rudra-free') { showToast('warning', 'Please add an API key in Settings first, pick Rudra’s Free Usage Model, or enable Privacy Mode for an offline local rewrite.'); return; }
+    if (!apiKey && providerId !== 'rudra-free' && providerId !== 'pro-academic') { showToast('warning', 'Please add an API key in Settings first, pick Rudra’s Free Usage Model, Stealth Pro Academic, or enable Privacy Mode for an offline local rewrite.'); return; }
 
     setLoading(true);
     setResult(null);
@@ -571,7 +573,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   const handleRehumanize = async () => {
     if (!result) return;
     const { providerId, apiKey } = getApiCredentials();
-    if (!apiKey && providerId !== 'rudra-free') { showToast('warning', 'No API key configured'); return; }
+    if (!apiKey && providerId !== 'rudra-free' && providerId !== 'pro-academic') { showToast('warning', 'No API key configured'); return; }
 
     setRehumanizing(true);
     let currentFullText = result.fullText;
@@ -880,6 +882,37 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           )}
         </div>
 
+        {/* Model Selection (Always Visible Outside Advanced Options) */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="flex items-center gap-2 text-sm font-medium text-dark-300">
+              <Sparkles className="w-4 h-4 text-accent-400" /> Model Selection
+            </label>
+            <span className="text-xs text-dark-400">
+              {PROVIDERS.find(p => p.id === preferredModel)?.free ? '✨ Pre-configured / Free' : '🔑 Custom Key Required'}
+            </span>
+          </div>
+          <select value={preferredModel} onChange={e => updatePreferredModel(e.target.value as ModelProvider)}
+            className="w-full px-3.5 py-2.5 bg-dark-800 border border-dark-700/60 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-500/50">
+            {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}{p.free ? ' (Free)' : ''}</option>)}
+          </select>
+          {(() => {
+            // Issue #272: users saved a provider key (e.g. Gemini) but the
+            // model stayed on the free default, so the key was never used.
+            // Make that state visible instead of silent.
+            if (preferredModel !== 'rudra-free' && preferredModel !== 'pro-academic') return null;
+            const withKeys = Object.entries(getApiKeys())
+              .filter(([id, v]) => (v as string)?.trim() && id !== 'rudra-free' && id !== 'pro-academic' && !['ollama', 'lm-studio', 'vllm'].includes(id))
+              .map(([id]) => PROVIDERS.find(p => p.id === id)?.name || id);
+            if (withKeys.length === 0) return null;
+            return (
+              <p className="text-xs text-amber-400/90 mt-1.5">
+                💡 {withKeys.join(', ')} key saved — select {withKeys.length === 1 ? 'it' : 'one of them'} above to use {withKeys.length === 1 ? 'it' : 'one'}; otherwise the free model runs.
+              </p>
+            );
+          })()}
+        </div>
+
         {/* Advanced Options */}
         <div>
           <button onClick={() => setShowAdvanced(!showAdvanced)}
@@ -914,30 +947,6 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
                     className="w-full px-3 py-2 bg-dark-800 border border-dark-700/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-500/50">
                     {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-dark-300 mb-2">
-                    <Sparkles className="w-4 h-4 text-accent-400" /> Model Selection
-                  </label>
-                  <select value={preferredModel} onChange={e => updatePreferredModel(e.target.value as ModelProvider)}
-                    className="w-full px-3 py-2 bg-dark-800 border border-dark-700/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent-500/50">
-                    {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.name}{p.free ? ' (Free)' : ''}</option>)}
-                  </select>
-                  {(() => {
-                    // Issue #272: users saved a provider key (e.g. Gemini) but the
-                    // model stayed on the free default, so the key was never used.
-                    // Make that state visible instead of silent.
-                    if (preferredModel !== 'rudra-free') return null;
-                    const withKeys = Object.entries(getApiKeys())
-                      .filter(([id, v]) => (v as string)?.trim() && id !== 'rudra-free' && !['ollama', 'lm-studio', 'vllm'].includes(id))
-                      .map(([id]) => PROVIDERS.find(p => p.id === id)?.name || id);
-                    if (withKeys.length === 0) return null;
-                    return (
-                      <p className="text-xs text-amber-400/90 mt-1">
-                        💡 {withKeys.join(', ')} key saved — select {withKeys.length === 1 ? 'it' : 'one of them'} above to use {withKeys.length === 1 ? 'it' : 'one'}; otherwise the free model runs.
-                      </p>
-                    );
-                  })()}
                 </div>
               </div>
               <div>

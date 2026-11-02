@@ -27,6 +27,7 @@ const API_KEY_ENV: Record<ModelProvider, string> = {
   // there's no client-facing API key, and the CLI doesn't proxy to it. Empty
   // string keeps the Record type happy without affecting runtime behavior.
   'rudra-free': '',
+  'pro-academic': '',
   gemini: 'GEMINI_API_KEY',
   openai: 'OPENAI_API_KEY',
   claude: 'ANTHROPIC_API_KEY',

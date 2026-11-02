@@ -10,6 +10,7 @@
 // wraps this file's generateWithProvider and intercepts the CLI cases.
 
 import { ModelProvider, Provider } from './types';
+import { runAcademicInversion } from './academic-inversion';
 
 export type { ModelProvider, Provider };
 
@@ -24,6 +25,7 @@ const ALLOWED_HOSTS = new Set([
   'integrate.api.nvidia.com', 'api.kilo.ai', 'inference-api.nousresearch.com',
   'api.perplexity.ai', 'api.fireworks.ai', 'api.openadapter.in',
   'www.codebuff.com', 'api.commandcode.ai', 'cloudcode-pa.googleapis.com',
+  'translate.googleapis.com',
 ]);
 
 // Local inference endpoints (Ollama, LM Studio, vLLM) listen on plain http over
@@ -132,6 +134,18 @@ export const PROVIDERS: Provider[] = [
     docsUrl: 'https://github.com/rudra496/StealthHumanizer#rudras-free-usage-model',
     defaultModel: 'amicus-humanizer-v1-onnx',
     models: ['amicus-humanizer-v1-onnx'],
+    placeholder: 'pre-configured',
+  },
+  {
+    id: 'pro-academic',
+    name: 'Stealth Pro Academic (Inversion)',
+    description: 'Standalone Pro-grade syntactic inversion engine. Multi-pass structural token disruption with academic citation ([1, 2]) and LaTeX ($...$) preservation. Instant processing (~3s), high human likeness, zero server load.',
+    free: true,
+    apiUrl: '',
+    getApiKeyUrl: '',
+    docsUrl: 'https://github.com/rudra496/StealthHumanizer',
+    defaultModel: 'academic-inversion-v1',
+    models: ['academic-inversion-v1'],
     placeholder: 'pre-configured',
   },
   {
@@ -704,6 +718,7 @@ export function getAvailableProvider(keys: Record<string, string | undefined>): 
   // --model selection, so we never auto-select them.
   const priority: ModelProvider[] = [
     'rudra-free',
+    'pro-academic',
     'gemini', 'groq', 'openrouter', 'together', 'cerebras', 'zai',
     'mistral', 'cohere', 'deepinfra', 'huggingface', 'cloudflare',
     'codebuff', 'command-code',
@@ -1243,6 +1258,11 @@ export async function generateWithProvider(
   const extras = hostReasoningParams(provider, model);
 
   switch (provider) {
+    case 'pro-academic': {
+      const invResult = await runAcademicInversion(userPrompt);
+      return invResult.text;
+    }
+
     case 'gemini':
       return geminiGenerate(apiKey, systemPrompt, userPrompt, model, options);
 

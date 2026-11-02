@@ -10,6 +10,7 @@ import { loadStyleModelAsync, loadStyleModel, hasStyleModel } from '@/lib/style-
 import { calibrateWithCorpus } from '@/lib/detector';
 import { chainModels } from '@/lib/chain';
 import { humanizeWithRudra, isRudraHumanizerConfigured } from '@/lib/server/rudra-free';
+import { runAcademicInversion } from '@/lib/academic-inversion';
 import {
   appendAuditLog,
   applyRewriteRegressionGuard,
@@ -101,10 +102,11 @@ export async function POST(request: NextRequest) {
       : (style === 'stealth' ? 'aggressive' : 'light');
 
     if (!text || !model) return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
-    // "Rudra's Free Usage Model" needs no client apiKey — the server uses a
-    // preconfigured Vercel env var. Skip all the provider/cli/apiKey checks.
+    // "Rudra's Free Usage Model" and "Stealth Pro Academic" need no client apiKey —
+    // they are pre-configured. Skip all the provider/cli/apiKey checks.
     const isRudraFree = model === 'rudra-free';
-    if (!isRudraFree && !apiKey) return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    const isProAcademic = model === 'pro-academic';
+    if (!isRudraFree && !isProAcademic && !apiKey) return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
     // Reject CLI-only runners on the primary model AND anywhere in the chain —
     // chainModels flows through lib/chain into the CLI-capable runtime, so an
     // unguarded chain entry would otherwise spawn the server's local CLI.
@@ -166,6 +168,9 @@ export async function POST(request: NextRequest) {
           if (isRudraFree) {
             const r = await humanizeWithRudra(batchInput);
             rewritten = r.text;
+          } else if (isProAcademic) {
+            const r = await runAcademicInversion(batchInput);
+            rewritten = r.text;
           } else {
             for (let j = 0; j < chunks.length; j++) {
               const out = await generateWithProvider(model, apiKey, systemPrompt, chunks[j], {
@@ -215,13 +220,17 @@ export async function POST(request: NextRequest) {
       langNote = '\n\nIMPORTANT: The text is in a language other than English. Rewrite it in the SAME language. Do NOT translate.';
     }
 
-    // ==================== LAYER 1: LLM Rewrite (or Rudra Free proxy) ====================
+    // ==================== LAYER 1: LLM Rewrite (or Rudra Free / Pro Academic) ====================
     let humanizedText = '';
     if (isRudraFree) {
       // Rudra's hosted model takes the whole text in one shot — no chunking,
       // no system prompt. The model is purpose-built for humanization.
       const rudraResult = await humanizeWithRudra(text);
       humanizedText = rudraResult.text;
+    } else if (isProAcademic) {
+      // Pro Academic runs zero-load multi-hop syntactic inversion with citation/math protection.
+      const invResult = await runAcademicInversion(text);
+      humanizedText = invResult.text;
     } else {
       for (let i = 0; i < chunks.length; i++) {
         const chunkPrompt = chunks[i] + langNote;
@@ -244,7 +253,7 @@ export async function POST(request: NextRequest) {
     // actively degrades gemma's text — running it would mangle contractions,
     // re-introduce AI fingerprints, and shorten the output. Bypass every
     // post-LLM layer for Rudra and let the API output stand on its own.
-    if (!isRudraFree) {
+    if (!isRudraFree && !isProAcademic) {
       // ==================== LAYER 2: Post-Processing ====================
       // Always apply corpus-aware post-processing if model is loaded
       if (useCorpus) {
@@ -324,7 +333,7 @@ export async function POST(request: NextRequest) {
     // delivers natural text and adding deterministic rewrites on top actively
     // hurts the detector score.
     let finalText: string;
-    if (isRudraFree) {
+    if (isRudraFree || isProAcademic) {
       finalText = currentText;
     } else {
       const guard = applyRewriteRegressionGuard({
@@ -393,7 +402,7 @@ export async function POST(request: NextRequest) {
       },
       fallbackBehavior: {
         used: false,
-        reason: isRudraFree ? 'skipped (rudra-free: no postprocessing)' : 'not needed',
+        reason: (isRudraFree || isProAcademic) ? 'skipped (pre-configured model: no postprocessing)' : 'not needed',
       },
       provenanceDisclosure: {
         source: 'user-provided-input',

@@ -4,6 +4,7 @@
 
 export type ModelProvider =
   | 'rudra-free'
+  | 'pro-academic'
   | 'gemini' | 'openai' | 'claude'
   | 'groq' | 'mistral' | 'cohere'
   | 'together' | 'openrouter' | 'cerebras'
