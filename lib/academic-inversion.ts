@@ -24,6 +24,8 @@ import { detectAI } from './detector';
 import { localRehumanizeSentence } from './rehumanize';
 import {
   applyHumanizeTransforms,
+  expandContractions,
+  isFormalStyle,
   textLooksBroken,
   sentenceLooksBroken,
   digitsPreserved,
@@ -246,7 +248,11 @@ async function tryPivot(
     const hop1 = await translateGtx(maskedText, 'en', intermediate, timeoutMs);
     const hop2 = await translateGtx(hop1, intermediate, 'en', timeoutMs);
     const restored = unmaskAcademicConstructs(hop2, tokenMap);
-    const scrubbed = scrubPostTranslationClichés(restored);
+    // NMT round-trips emit contractions even for formal input — expand them
+    // back before the register-sensitive gates.
+    const scrubbed = isFormalStyle(style)
+      ? scrubPostTranslationClichés(expandContractions(restored))
+      : scrubPostTranslationClichés(restored);
 
     if (scrubbed.trim().toLowerCase() === para.trim().toLowerCase()) return null;
     if (scrubbed.length < 5) return null;
@@ -306,6 +312,18 @@ export async function runAcademicInversion(
     if (!para.trim()) {
       transformedParagraphs.push('');
       continue;
+    }
+
+    // Formal styles (academic/technical): the deterministic engine is
+    // meaning-safe by construction, so it runs FIRST and the pivot is only a
+    // fallback — NMT round-trips can drift meaning ("utilize" -> "exploit")
+    // even after gating. Casual registers keep pivot-first for voice variety.
+    if (isFormalStyle(style)) {
+      const deterministic = applyHumanizeTransforms(para, { style });
+      if (deterministic.trim().toLowerCase() !== para.trim().toLowerCase()) {
+        transformedParagraphs.push(deterministic);
+        continue;
+      }
     }
 
     // Pass 1: German pivot (strongest structural disruption).

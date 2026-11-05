@@ -118,6 +118,23 @@ test('digitsPreserved gates translation drift on numbers and statistics', () => 
   assert.equal(digitsPreserved('GDP grew 3% in 2023.', 'GDP grew 4% in 2023.'), false);
 });
 
+test('academic register: deterministic-first path adds no contractions and keeps meaning', async () => {
+  // Regression for the 2026-11-06 live finding: pivot round-trips leaked
+  // contractions into academic output and drifted meaning ("ready" -> "over").
+  const input = 'It is important to note that we do not know if it is ready. This study delves into the mechanisms that utilize large datasets.';
+  const result = await runAcademicInversion(input, { timeoutMs: 15000, style: 'academic' });
+  assert.equal((result.text.match(/\b\w+'(?:s|t|re|ve|ll|d|m)\b/g) || []).length, 0, 'academic output must be contraction-free');
+  assert.match(result.text, /ready/i, '"ready" must survive');
+  assert.doesNotMatch(result.text, /exploit/i, '"utilize" must not become "exploit"');
+  assert.notEqual(result.text.trim().toLowerCase(), input.trim().toLowerCase(), 'output must still change');
+});
+
+test('expandContractions restores formal full forms', async () => {
+  const { expandContractions } = await import('../../lib/humanize-transforms.ts');
+  const out = expandContractions("It's important to note that we don't know if it's been ready.");
+  assert.equal(out, 'It is important to note that we do not know if it has been ready.');
+});
+
 test('localRehumanizeSentence respects register and keeps verbs intact', () => {
   const academic = localRehumanizeSentence(
     'It is important to note that the implementation of AI has enabled rapid developments in automation.',

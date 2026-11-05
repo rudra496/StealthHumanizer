@@ -362,6 +362,57 @@ function applyCadence(s: string): string {
   return adjusted.join(' ');
 }
 
+/**
+ * Expand contractions back to full forms (formal registers). "X's been"
+ * resolves to "has been" before the ambiguous "'s"; sentence-initial capitals
+ * are preserved on the expanded form. Meaning-identical in every case here.
+ */
+function matchCase(match: string, replacement: string): string {
+  return match[0] === match[0].toUpperCase()
+    ? replacement.charAt(0).toUpperCase() + replacement.slice(1)
+    : replacement;
+}
+
+const CONTRACTION_EXPANSIONS: Array<[RegExp, (m: string, g1?: string) => string]> = [
+  [/\b(\w+)'s been\b/g, (m, g1) => `${g1 ?? m} has been`],
+  [/\bcan't\b/gi, (m) => matchCase(m, 'cannot')],
+  [/\bwon't\b/gi, (m) => matchCase(m, 'will not')],
+  [/\bdon't\b/gi, (m) => matchCase(m, 'do not')],
+  [/\bdoesn't\b/gi, (m) => matchCase(m, 'does not')],
+  [/\bdidn't\b/gi, (m) => matchCase(m, 'did not')],
+  [/\bisn't\b/gi, (m) => matchCase(m, 'is not')],
+  [/\baren't\b/gi, (m) => matchCase(m, 'are not')],
+  [/\bwasn't\b/gi, (m) => matchCase(m, 'was not')],
+  [/\bweren't\b/gi, (m) => matchCase(m, 'were not')],
+  [/\bhasn't\b/gi, (m) => matchCase(m, 'has not')],
+  [/\bhaven't\b/gi, (m) => matchCase(m, 'have not')],
+  [/\bhadn't\b/gi, (m) => matchCase(m, 'had not')],
+  [/\bwouldn't\b/gi, (m) => matchCase(m, 'would not')],
+  [/\bshouldn't\b/gi, (m) => matchCase(m, 'should not')],
+  [/\bcouldn't\b/gi, (m) => matchCase(m, 'could not')],
+  [/\bI'm\b/g, () => 'I am'],
+  [/\byou're\b/gi, (m) => matchCase(m, 'you are')],
+  [/\bwe're\b/gi, (m) => matchCase(m, 'we are')],
+  [/\bthey're\b/gi, (m) => matchCase(m, 'they are')],
+  [/\bI've\b/g, () => 'I have'],
+  [/\bwe've\b/gi, (m) => matchCase(m, 'we have')],
+  [/\bthey've\b/gi, (m) => matchCase(m, 'they have')],
+  [/\bI'll\b/g, () => 'I will'],
+  [/\bwe'll\b/gi, (m) => matchCase(m, 'we will')],
+  [/\bit's\b/gi, (m) => matchCase(m, 'it is')],
+  [/\bthat's\b/gi, (m) => matchCase(m, 'that is')],
+  [/\bthere's\b/gi, (m) => matchCase(m, 'there is')],
+];
+
+/** Expand contractions to full forms (used to enforce formal register). */
+export function expandContractions(text: string): string {
+  let out = text;
+  for (const [re, rep] of CONTRACTION_EXPANSIONS) {
+    out = out.replace(re, (m: string, g1: string) => rep(m, g1));
+  }
+  return out;
+}
+
 export interface HumanizeTransformOptions {
   style?: string | StylePreset;
   maxAdverbSwaps?: number;
