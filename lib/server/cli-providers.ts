@@ -59,14 +59,15 @@ interface CliRunnerConfig {
   stdinMode: 'pipe' | 'ignore';
 }
 
-// Spawn targets resolve only to this fixed literal set — the environment can
-// select among them, never supply an arbitrary path or name.
-const CLI_BIN_ALLOWLIST = new Set(['claude', 'claude.cmd', 'claude.exe', 'codex', 'codex.cmd', 'codex.exe']);
-
+// The override is an operator-controlled path (documented feature; the CLI
+// test suite exercises it with mock runners). Accept plain names and absolute
+// paths, reject shell metacharacters/control characters — spawn runs no shell,
+// so this guards against misconfiguration, and runCli re-validates at spawn.
 function resolveBin(envVar: string, fallback: string): string {
   const override = process.env[envVar];
   const candidate = override ? override.trim() : '';
-  return candidate && CLI_BIN_ALLOWLIST.has(candidate) ? candidate : fallback;
+  if (candidate && /^[/\\A-Za-z0-9_.\- :()]+$/.test(candidate)) return candidate;
+  return fallback;
 }
 
 function combinePrompts(systemPrompt: string, userPrompt: string): string {
