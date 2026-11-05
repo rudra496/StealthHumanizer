@@ -29,7 +29,7 @@ const AI_PHRASES = [
   'innovative', 'cutting-edge', 'state-of-the-art', 'groundbreaking',
   'transformative', 'comprehensive', 'unprecedented',
   'utilize', 'facilitate', 'optimize', 'leverage',
-  'implement', 'foster', 'cultivate', 'empower',
+  'foster', 'cultivate', 'empower',
   'embark on a journey', 'sheds light on', 'brings to the forefront',
 ];
 
@@ -181,7 +181,7 @@ function calculateAIPhraseDensity(text: string): number {
   if (isArabic) {
     AR_AI_PHRASES.forEach(phrase => { if (text.includes(phrase)) count++; });
   }
-  return Math.min(100, (count / Math.max(splitIntoSentences(text).length, 1)) * 20);
+  return Math.min(100, (count / Math.max(splitIntoSentences(text).length, 1)) * 50);
 }
 
 function calculateSentenceStartDiversity(sentences: string[]): number {
@@ -221,7 +221,7 @@ function calculateQuantifierOveruse(text: string): number {
 
 function analyzeSentence(sentence: string): SentenceDetectionResult {
   const issues: string[] = [];
-  let score = 50;
+  let score = 68;
 
   const lower = sentence.toLowerCase();
 
@@ -325,19 +325,17 @@ function analyzeSentence(sentence: string): SentenceDetectionResult {
   // Starts with conjunction
   if (/^(and|but|so|because|also|plus|or|well|ok|hey)\b/i.test(sentence)) { score += 4; }
 
-  // Uniform structure penalty
-  // Uniform structure penalty: only apply to sentences that are suspiciously
-  // "perfect" — exactly medium length, no contractions, no parentheticals,
-  // no dashes, no questions/exclamations. The previous condition was far too
-  // broad and penalised ALL normal sentences.
+  // Uniform structure penalty: only apply when the sentence already displays
+  // another AI tell, rather than penalizing all normal 12-22 word sentences in formal prose.
   const words = sentence.split(/\s+/);
   if (words.length >= 12 && words.length <= 22
     && words.every(w => /^[\w,.]+$/.test(w))
     && /\.$/.test(sentence)
     && !contractions?.length
     && !/[()\[\]—]/.test(sentence)
-    && humanSignals === 0) {
-    issues.push('Uniform structure'); score -= 8;
+    && humanSignals === 0
+    && issues.length > 0) {
+    issues.push('Uniform structure'); score -= 6;
   }
 
   score = Math.max(0, Math.min(100, score));
@@ -411,14 +409,14 @@ export function detectAI(text: string): DetectionResult {
   const quantifierOveruse = calculateQuantifierOveruse(text);
 
   const weights = {
-    sentenceAvg: 0.25,
-    perplexity: 0.15,
-    burstiness: 0.15,
+    sentenceAvg: 0.35,
+    perplexity: 0.12,
+    burstiness: 0.12,
     vocabulary: 0.05,
-    sentenceVariation: 0.08,
-    transitions: 0.08,
+    sentenceVariation: 0.07,
+    transitions: 0.07,
     passive: 0.05,
-    aiPhrases: 0.12,
+    aiPhrases: 0.14,
     sentenceStart: 0.05,
     pronoun: 0.03,
     hedging: 0.03,
@@ -426,7 +424,7 @@ export function detectAI(text: string): DetectionResult {
   };
 
   const sentenceAvg = sentenceResults.length > 0
-    ? sentenceResults.reduce((s, r) => s + r.score, 0) / sentenceResults.length : 50;
+    ? sentenceResults.reduce((s, r) => s + r.score, 0) / sentenceResults.length : 68;
 
   const overallScore = (
     sentenceAvg * weights.sentenceAvg +

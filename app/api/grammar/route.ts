@@ -42,6 +42,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: `Provider "${model}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
     }
 
+    // Stealth Pro Academic & Privacy Mode: deterministic local grammar check
+    // (these engines do not use an external LLM JSON grammar endpoint).
+    if (model === 'pro-academic' || model === 'privacy') {
+      const local = checkGrammarLocally(text);
+      return NextResponse.json({ success: true, ...local, source: 'local' });
+    }
+
     // Rudra's Free Usage Model: run the hosted gemma grammar fixer on the VPS
     // (no provider API key needed), falling back to the local checker.
     if (model === 'rudra-free') {

@@ -147,7 +147,7 @@ const SUFFIX_VERB_MAPS: Array<[RegExp, Record<string, string>]> = [
   [/\butiliz(e|es|ed|ing)\b/gi, { e: 'use', es: 'uses', ed: 'used', ing: 'using' }],
   [/\butilis(e|es|ed|ing)\b/gi, { e: 'use', es: 'uses', ed: 'used', ing: 'using' }],
   [/\bleverag(e|es|ed|ing)\b/gi, { e: 'use', es: 'uses', ed: 'used', ing: 'using' }],
-  [/\bfacilitat(e|es|ed|ing)\b/gi, { e: 'help', es: 'helps', ed: 'helped', ing: 'helping' }],
+  [/\bfacilitat(e|es|ed|ing)\b/gi, { e: 'enable', es: 'enables', ed: 'enabled', ing: 'enabling' }],
   [/\bstreamlin(e|es|ed|ing)\b/gi, { e: 'simplify', es: 'simplifies', ed: 'simplified', ing: 'simplifying' }],
 ];
 
@@ -272,6 +272,12 @@ const RULES: TransformRule[] = [
   { pattern: /\bin today's world\b/gi, replacement: 'today', register: 'formal' },
   { pattern: /\bin the contemporary landscape\b/gi, replacement: 'currently', register: 'formal' },
   { pattern: /\bin the modern era\b/gi, replacement: 'today', register: 'formal' },
+  { pattern: /\bproven to be particularly beneficial in the realm of\b/gi, replacement: 'proven especially useful in', register: 'formal' },
+  { pattern: /\bproven to be particularly beneficial in\b/gi, replacement: 'proven particularly useful in', register: 'formal' },
+  { pattern: /\bin the realm of\b/gi, replacement: 'in', register: 'formal' },
+  { pattern: /\bwherein organizations can anticipate\b/gi, replacement: 'allowing organizations to forecast', register: 'formal' },
+  { pattern: /\bwherein companies can anticipate\b/gi, replacement: 'allowing companies to forecast', register: 'formal' },
+  { pattern: /\bwherein\b/gi, replacement: 'where', register: 'formal' },
   { pattern: /\bare capable of producing human-like text\b/gi, replacement: 'can generate human-grade prose', register: 'formal' },
   { pattern: /\bAI implementations\b/gi, replacement: 'AI deployments', register: 'formal' },
 
