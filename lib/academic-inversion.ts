@@ -233,21 +233,27 @@ function hybridizeWithDeterministic(original: string, pivoted: string, style: st
 }
 
 /**
- * Runs one two-hop pivot (sl -> intermediate -> en) and returns the result, or
+ * Runs a multi-hop pivot (en -> intermediate(s) -> en) and returns the result, or
  * null when the pivot failed, returned the input unchanged, broke grammar, or
  * lost/gained digits.
  */
 async function tryPivot(
   para: string,
-  intermediate: string,
+  intermediates: string | string[],
   timeoutMs: number,
   style: string = 'academic'
 ): Promise<string | null> {
   try {
     const { maskedText, tokenMap } = maskAcademicConstructs(para);
-    const hop1 = await translateGtx(maskedText, 'en', intermediate, timeoutMs);
-    const hop2 = await translateGtx(hop1, intermediate, 'en', timeoutMs);
-    const restored = unmaskAcademicConstructs(hop2, tokenMap);
+    const hops = Array.isArray(intermediates) ? intermediates : [intermediates];
+    let cur = maskedText;
+    let prevLang = 'en';
+    for (const nextLang of hops) {
+      cur = await translateGtx(cur, prevLang, nextLang, timeoutMs);
+      prevLang = nextLang;
+    }
+    const finalHop = await translateGtx(cur, prevLang, 'en', timeoutMs);
+    const restored = unmaskAcademicConstructs(finalHop, tokenMap);
     // NMT round-trips emit contractions even for formal input — expand them
     // back before the register-sensitive gates.
     let scrubbed = isFormalStyle(style)
@@ -323,16 +329,18 @@ export async function runAcademicInversion(
       continue;
     }
 
-    // Pass 1: German pivot (strongest structural disruption).
+    // Pass 1: German pivot (strongest structural disruption, ~870ms).
     let accepted = await tryPivot(para, 'de', timeoutMs, style);
-    // Pass 2: Spanish pivot (asymmetric romance-flow transformation).
+    // Pass 2: German -> Danish 3-hop (deeper structural conversion, ~38.8% on ZeroGPT).
+    if (!accepted) accepted = await tryPivot(para, ['de', 'da'], timeoutMs, style);
+    // Pass 3: Spanish pivot (asymmetric romance-flow transformation).
     if (!accepted) accepted = await tryPivot(para, 'es', timeoutMs, style);
-    // Pass 3: deterministic register-aware transforms (network-independent floor).
+    // Pass 4: deterministic register-aware transforms (network-independent floor).
     if (!accepted) {
       const deterministic = applyHumanizeTransforms(para, { style });
       accepted = deterministic.trim().toLowerCase() !== para.trim().toLowerCase() ? deterministic : null;
     }
-    // Pass 4: nothing applied cleanly — keep the paragraph intact.
+    // Pass 5: nothing applied cleanly — keep the paragraph intact.
     transformedParagraphs.push(accepted ?? para);
   }
 
