@@ -15,6 +15,26 @@ import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+
+def _assert_safe_url(url):
+    """Defense-in-depth for outbound calls: https/http only, host must not be
+    loopback / private / reserved (blocks SSRF-class mistakes)."""
+    import ipaddress
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError("blocked non-http(s) URL: %r" % url)
+    host = parsed.hostname or ""
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None and (ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local):
+        raise ValueError("blocked private/reserved target host: %r" % host)
+    if ip is None and host in ("localhost", "", "0.0.0.0"):
+        raise ValueError("blocked loopback target host: %r" % host)
+
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CORPUS = os.path.join(ROOT, "data", "papers", "corpus", "papers.jsonl")
 OUT = os.path.join(ROOT, "training", "pairs.jsonl")
@@ -69,6 +89,7 @@ def call_model(api_key, model, abstract, use_reasoning_flag):
     }
     if use_reasoning_flag:
         body["reasoning_effort"] = REASONING.get(model, "low")
+    _assert_safe_url("https://api.groq.com/openai/v1/chat/completions")
     req = urllib.request.Request(
         "https://api.groq.com/openai/v1/chat/completions",
         data=json.dumps(body).encode(),

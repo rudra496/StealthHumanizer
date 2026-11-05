@@ -4,6 +4,7 @@
 
 import { getRandomSafeSynonym } from './synonyms';
 import { applyCollocation, applyRandomCollocation } from './collocations';
+import { isFormalStyle } from './humanize-transforms';
 import type { CorpusStyleModel } from './style-model';
 import { loadStyleModel } from './style-model';
 import { calculateReadability } from './readability';
@@ -979,7 +980,11 @@ export function stealthPostprocess(text: string, options?: { style?: StylePreset
   let r = stripLLMPreamble(text);
   r = stripAIDashes(r);
   r = stripAILexicon(r);
-  r = forceContractions(r);
+  // Academic/technical register never receives contractions, even at
+  // aggressive/ninja intensity (contractions are a casual-register signal).
+  if (!isFormalStyle(options?.style)) {
+    r = forceContractions(r);
+  }
   r = injectPerplexity(r);
   r = manipulateSentenceLengths(r);
   r = ensureBurstiness(r);

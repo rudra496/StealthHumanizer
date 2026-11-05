@@ -8,22 +8,47 @@ import json
 import os
 import sys
 import time
-import urllib.request
+
+
+def _assert_safe_url(url):
+    """Defense-in-depth for outbound calls: https/http only, host must not be
+    loopback / private / reserved (blocks SSRF-class mistakes)."""
+    import ipaddress
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError("blocked non-http(s) URL: %r" % url)
+    host = parsed.hostname or ""
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None and (ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local):
+        raise ValueError("blocked private/reserved target host: %r" % host)
+    if ip is None and host in ("localhost", "", "0.0.0.0"):
+        raise ValueError("blocked loopback target host: %r" % host)
+
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gen_pairs import OUT, truncate_sentences  # noqa: E402
 
 TARGET_ROWS = 12000
 LENGTH = 100
-API = ("https://datasets-server.huggingface.co/rows?dataset=liamdugan%2Fraid"
-       "&config=raid&split=train&length=100&offset={off}")
+API_BASE = "https://datasets-server.huggingface.co/rows?dataset=liamdugan/raid&config=raid&split=train&length=100&offset="
 
 
 def fetch(offset, tries=4):
+    try:
+        import requests
+    except ImportError:
+        raise SystemExit("mine_raid requires the requests package: pip install requests")
     for a in range(tries):
         try:
-            with urllib.request.urlopen(API.format(off=offset), timeout=45) as r:
-                return json.loads(r.read())
+            url = f"{API_BASE}{int(offset)}"
+            _assert_safe_url(url)
+            resp = requests.get(url, timeout=45)
+            resp.raise_for_status()
+            return resp.json()
         except Exception as e:
             print(f"fetch {offset} attempt {a}: {e}", flush=True)
             time.sleep(3 * (a + 1))

@@ -7,6 +7,57 @@ this project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — security hardening sweep (training scripts + server runtime)
+
+Static security review flagged defense gaps in the training utilities and
+server runtime; all addressed with behavior-preserving hardening:
+
+- Outbound calls in `training/` scripts (compare_suite, gen_pairs, mine_raid)
+  validate scheme and target host (https/http only; loopback, private, and
+  reserved addresses refused) before every request.
+- CLI output paths (`benchmark.py --out`, `extract_q1_vocabulary.py`,
+  `compare_suite.py`, `nginx_add_cors.py`, Kaggle kernels) resolve through
+  `pathlib` containment checks — traversal components are rejected.
+- `build_hc3.py` installs missing deps via `subprocess.run` (argv array)
+  instead of `os.system` (breaks on paths with spaces, injection-prone).
+- CLI-runner executables (`claude`/`codex`) resolve only through a fixed
+  literal allowlist; environment overrides can no longer supply arbitrary
+  binary paths. `runCli` additionally rejects metacharacter-carrying values
+  at spawn time.
+- `lib/style-model.ts` no longer fetches from an environment-provided base
+  URL — browser loads use `window.location.origin`, server loads use the
+  existing filesystem strategies.
+
+### Fixed — humanization quality regression (blind rewrite cascade)
+
+The rewrite-guarantee added on 2026-11-02/05 fixed verbatim-echo outputs by
+force, and the force broke the prose. All of the following are repaired:
+
+- Literal replacement-group tokens could leak into output ("examine$1",
+  "As a branch of $2, $1 focuses on") — one scrubber pattern referenced a
+  capture group that did not exist, and the offline phrase engine passed
+  replacements as callbacks, which never interpolate `$1`/`$2`.
+- Nominalization rewrites ignored sentence position and following verbs:
+  "benefit from the implementation of AI" became "benefit from implementing
+  of AI", and "The implementation of X has enabled Y" was remapped to
+  "Deploying X accelerates", inventing a different claim.
+- Contractions were injected unconditionally, so academic and technical text
+  came back with "can't", "it's", and "I'm" mid-paragraph.
+- A last-resort random synonym swap replaced arbitrary words, producing
+  2010-era article-spinner prose.
+
+New guardrails: shared `lib/humanize-transforms.ts` engine — position-aware,
+verb-preserving nominalization rewrites; register-aware contractions
+(academic/technical never receive them); a mechanical-grammar gate
+(`sentenceLooksBroken`) that vetoes any candidate with doubled prepositions,
+bare gerund+"of", literal `$N` tokens, or unbalanced brackets; number-multiset
+preservation gating for translation pivots; and a bounded adverb-only
+variation as the non-identity fallback. The translation pivot is a two-hop
+round trip (en→de→en, then en→es→en) with per-paragraph acceptance gating;
+failed paragraphs fall back to the deterministic pass instead of the cascade.
+The inversion tier bypasses the corpus/synonym post-processing layers again,
+and the humanize route's non-zero guard uses the grammar-gated pass.
+
 ### Changed — current models for every provider
 
 Model lists and defaults now point at models that exist as of October 2026

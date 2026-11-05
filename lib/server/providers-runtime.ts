@@ -54,9 +54,10 @@ export { generateAlternatives, testApiKey, validateApiKey } from '../providers';
  *  providers or when the binary isn't found. */
 export async function testCliProvider(provider: ModelProvider): Promise<boolean> {
   if (!isCliOnlyProvider(provider)) return false;
-  const bin = provider === 'claude-code'
-    ? (process.env.STEALTHHUMANIZER_CLAUDE_CODE_BIN || 'claude')
-    : (process.env.STEALTHHUMANIZER_CODEX_BIN || 'codex');
+  // Spawn targets are fixed per logical task in code — the environment is
+  // never consulted for the executable here (operator overrides in
+  // cli-providers' runCli stay behind the spawn-time metacharacter guard).
+  const bin = provider === 'claude-code' ? 'claude' : 'codex';
   return new Promise<boolean>((resolve) => {
     const child = spawn(bin, ['--version'], { stdio: 'ignore' });
     child.on('error', () => resolve(false));

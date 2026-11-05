@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
         );
       } else if (model === 'privacy') {
         // Offline privacy mode fallback
-        rawRewrites = cleanFlagged.map((s, i) => chooseImprovedRewrite(s, undefined, i));
+        rawRewrites = cleanFlagged.map((s, i) => chooseImprovedRewrite(s, undefined, i, style));
       } else {
         const rehumanizePrompt = getRehumanizePrompt(cleanFlagged, style || 'humanize');
         const contextPrompt = fullText
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     const replacements = cleanFlagged.map((original, index) => ({
       original,
-      replacement: chooseImprovedRewrite(original, rawRewrites[index], index),
+      replacement: chooseImprovedRewrite(original, rawRewrites[index], index, style),
     }));
     usedFallback = usedFallback || replacements.some((item, index) => item.replacement !== rawRewrites[index]);
 

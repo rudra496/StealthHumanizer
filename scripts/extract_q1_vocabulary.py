@@ -91,9 +91,13 @@ def main():
         "phrases": phrases
     }
     
-    os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
-    with open(args.output, 'w', encoding='utf-8') as f:
-        json.dump(output_data, f, indent=2)
+    from pathlib import Path
+    out_path = Path(args.output).resolve()
+    base = Path(os.path.dirname(os.path.abspath(__file__))).resolve()
+    if not out_path.is_relative_to(base):
+        raise ValueError("--output must stay inside the scripts directory")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(output_data, indent=2), encoding='utf-8')
         
     print(f"Successfully saved {len(vocab)} words and {len(phrases)} phrases to {args.output}")
 

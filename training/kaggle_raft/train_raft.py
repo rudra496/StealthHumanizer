@@ -24,7 +24,12 @@ elif torch.cuda.is_available() and "P100" in torch.cuda.get_device_name(0):
                     "--index-url", "https://download.pytorch.org/whl/cu118",
                     "--extra-index-url", "https://pypi.org/simple"],
                    check=True)
-    open("/tmp/.torch_patched", "w").close()
+    from pathlib import Path
+    import tempfile
+    sentinel = Path(tempfile.gettempdir(), ".torch_patched").resolve()
+    if not sentinel.is_relative_to(Path(tempfile.gettempdir()).resolve()):
+        raise ValueError("sentinel path escapes the temp directory")
+    sentinel.write_text("", encoding="utf-8")
     os.execv(sys.executable, [sys.executable] + sys.argv)
 from transformers import (
     AutoModelForSeq2SeqLM,

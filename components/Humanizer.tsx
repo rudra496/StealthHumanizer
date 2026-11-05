@@ -16,6 +16,7 @@ import { buildSentenceResults } from '@/lib/text-utils';
 import { WEB_PROVIDERS as PROVIDERS } from '@/lib/providers';
 import { assessSemanticFidelity } from '@/lib/semantic-fidelity';
 import { localHumanizeText } from '@/lib/local-humanizer';
+import { applyHumanizeTransforms } from '@/lib/humanize-transforms';
 import { BASE_PATH } from '@/lib/base-path';
 import { addCostEntry } from '@/lib/cost-tracker';
 import { addObservabilityEvent, estimateRunCost } from '@/lib/observability';
@@ -122,9 +123,13 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   const [pipelineStep, setPipelineStep] = useState('');
   // Default provider on the public Vercel deployment is "Rudra's Free Usage
   // Model" — pre-configured, no API key needed. Self-hosters can override via
-  // NEXT_PUBLIC_DEFAULT_PROVIDER (e.g. "gemini", "ollama").
+  // NEXT_PUBLIC_DEFAULT_PROVIDER (e.g. "gemini", "ollama") — the value is only
+  // accepted when it matches a known provider id, never used verbatim.
+  const configuredDefault = process.env.NEXT_PUBLIC_DEFAULT_PROVIDER as ModelProvider | undefined;
   const DEFAULT_PROVIDER: ModelProvider =
-    ((process.env.NEXT_PUBLIC_DEFAULT_PROVIDER as ModelProvider | undefined) || 'rudra-free');
+    configuredDefault && PROVIDERS.some((p) => p.id === configuredDefault)
+      ? configuredDefault
+      : 'rudra-free';
   const [preferredModel, setPreferredModel] = useState<ModelProvider>(DEFAULT_PROVIDER);
   // Persist the selection so a user who picked their own provider (e.g. Gemini)
   // keeps it across reloads — otherwise the site silently falls back to the
@@ -328,16 +333,22 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         while (Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, 4000));
           setPipelineStep('Humanizing (sampling rewrites)…');
-          const stResp = await fetch(`${BASE_PATH}/api/humanize-job?id=${jobId}`);
+          // Job ids are server-generated; guard + encode before they land in
+          // a URL (the shuttle route re-validates the id server-side too).
+          if (!/^[\w-]{6,64}$/.test(jobId)) throw new Error('Invalid job id');
+          const stResp = await fetch(`${BASE_PATH}/api/humanize-job?id=${encodeURIComponent(jobId)}`);
           const stData = await stResp.json().catch(() => ({}));
           if (stData?.status === 'done') { rd = stData; break; }
           if (stData?.status === 'error') throw new Error(stData?.error || 'Humanization failed');
         }
         if (!rd) throw new Error('Humanization timed out — please try again');
         const rawFullText: string = rd.humanized || '';
+        // Verbatim echo (tiny inputs / busy server): apply the shared
+        // grammar-gated deterministic pass instead of the offline regex
+        // spinner, which mangled register and collocations.
         const fullText: string = (rawFullText && rawFullText.trim().toLowerCase() !== inputText.trim().toLowerCase())
           ? rawFullText
-          : localHumanizeText(inputText, { style });
+          : applyHumanizeTransforms(inputText, { style });
         const det = detectAI(fullText);
         const sents = buildSentenceResults(inputText, fullText).map((row: any, i: number) => ({
           original: row.original, humanized: row.humanized, alternatives: [] as string[],

@@ -11,7 +11,7 @@ import { calibrateWithCorpus } from '@/lib/detector';
 import { chainModels } from '@/lib/chain';
 import { humanizeWithRudra, isRudraHumanizerConfigured } from '@/lib/server/rudra-free';
 import { runAcademicInversion } from '@/lib/academic-inversion';
-import { localHumanizeText } from '@/lib/local-humanizer';
+import { applyHumanizeTransforms } from '@/lib/humanize-transforms';
 import {
   appendAuditLog,
   applyRewriteRegressionGuard,
@@ -182,7 +182,11 @@ export async function POST(request: NextRequest) {
               rewritten += (j > 0 ? '\n\n' : '') + out;
             }
           }
-          const postprocessed = enablePostprocess ? postprocess(rewritten, { light: true, style: style as any, synonymIntensity }) : rewritten;
+          // Same bypass as the single-text path: rudra-free and pro-academic
+          // outputs are already clean — the synonym/corpus layers damage them.
+          const postprocessed = (!isRudraFree && !isProAcademic && enablePostprocess)
+            ? postprocess(rewritten, { light: true, style: style as any, synonymIntensity })
+            : rewritten;
           const final = scrubAIText(postprocessed);
           const detection = detectAI(final);
           const confidenceReport = buildConfidenceReport(detection.score);
@@ -247,14 +251,15 @@ export async function POST(request: NextRequest) {
     let passes = 1;
     let currentText = humanizedText;
 
-    // Rudra's Free Usage Model: gemma3:4b already produces natural, faithful
-    // rewrites via the humanize system prompt on the Oracle side. The full
-    // postprocessing pipeline (corpus swaps, synonym replacement, intensity
-    // rewrites, ninja surgical edits) was designed for weaker LLM outputs and
-    // actively degrades gemma's text — running it would mangle contractions,
-    // re-introduce AI fingerprints, and shorten the output. Bypass every
-    // post-LLM layer for Rudra and let the API output stand on its own.
-    if (!isRudraFree) {
+    // Rudra's Free Usage Model and Stealth Pro Academic: both engines already
+    // produce clean, register-aware output on their own (gemma via the Oracle
+    // humanize prompt; inversion via its own cliche scrub + grammar gate).
+    // The full postprocessing pipeline (corpus swaps, synonym replacement,
+    // intensity rewrites, ninja surgical edits) was designed for weaker LLM
+    // outputs and actively degrades their text — running it would mangle
+    // contractions, re-introduce AI fingerprints, and shorten the output.
+    // Bypass every post-LLM layer for both and let the output stand as-is.
+    if (!isRudraFree && !isProAcademic) {
       // ==================== LAYER 2: Post-Processing ====================
       // Always apply corpus-aware post-processing if model is loaded
       if (useCorpus) {
@@ -337,8 +342,10 @@ export async function POST(request: NextRequest) {
     if (isRudraFree) {
       finalText = currentText;
     } else if (isProAcademic) {
-      finalText = intensity === 'light' ? currentText : intensityPostprocess(currentText, intensity, { style: style as any });
-      finalText = scrubAIText(finalText);
+      // The inversion engine already de-clichés and grammar-gates its output
+      // internally. scrubAIText's de-pronoun transforms and intensity
+      // rewrites would re-mangle academic register on top of a clean result.
+      finalText = currentText;
     } else {
       const guard = applyRewriteRegressionGuard({
         // Compare the postprocessed candidate against the RAW LLM output, not the
@@ -369,7 +376,7 @@ export async function POST(request: NextRequest) {
           .slice(0, 3)
           .filter((s) => s.score < 55 && s.text && s.text.trim().length > 20);
         const replacements = worst
-          .map((s) => ({ original: s.text, replacement: localRehumanizeSentence(s.text) }))
+          .map((s) => ({ original: s.text, replacement: localRehumanizeSentence(s.text, 0, { style }) }))
           .filter((r) => r.replacement && r.replacement.trim() !== r.original.trim());
         if (replacements.length > 0) {
           finalText = replaceSentencesInText(finalText, replacements);
@@ -380,17 +387,13 @@ export async function POST(request: NextRequest) {
     }
 
     // GUARANTEED NON-ZERO TRANSFORMATION GUARD:
-    // If for any reason (e.g. edge translation cycled back to identical English words,
-    // or an upstream provider returned verbatim input), the text was NOT changed:
+    // If for any reason (e.g. a translation pivot cycled back to identical
+    // English words, or an upstream provider returned verbatim input) the
+    // text was NOT changed, apply the shared register-aware deterministic
+    // pass. It changes the text through grammar-gated transforms only —
+    // never through the synonym-swap cascade that previously mangled prose.
     if (finalText.trim().toLowerCase() === text.trim().toLowerCase()) {
-      const fallbackLocal = localHumanizeText(text, { style: style as any });
-      const fallbackPolished = postprocess(fallbackLocal, {
-        light: false,
-        style: style as any,
-        synonymIntensity: Math.max(synonymIntensity, 25),
-      });
-      finalText = intensityPostprocess(fallbackPolished, intensity || 'aggressive', { style: style as any });
-      finalText = scrubAIText(finalText);
+      finalText = applyHumanizeTransforms(finalText, { style });
     }
     const finalDetection = detectAI(finalText);
     const confidenceReport = buildConfidenceReport(finalDetection.score);

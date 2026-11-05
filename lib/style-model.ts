@@ -109,15 +109,17 @@ export async function loadStyleModelAsync(): Promise<CorpusStyleModel | null> {
   if (fetchPromise) return fetchPromise;
 
   fetchPromise = (async () => {
-    // Strategy 1: Fetch from public directory (works in browser + server)
+    // Strategy 1: Fetch from public directory — BROWSER ONLY. Server-side
+    // loading goes through the filesystem strategies below: an environment-
+    // provided base URL must never flow into fetch (SSRF surface).
     try {
-      const baseUrl = typeof window !== 'undefined'
-        ? window.location.origin
-        : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-      const res = await fetch(`${baseUrl}/corpus-style-model.json`);
-      if (res.ok) {
-        cachedModel = await res.json();
-        return cachedModel;
+      if (typeof window !== 'undefined') {
+        const baseUrl = window.location.origin;
+        const res = await fetch(`${baseUrl}/corpus-style-model.json`);
+        if (res.ok) {
+          cachedModel = await res.json();
+          return cachedModel;
+        }
       }
     } catch {
       // fetch failed, try fs

@@ -1,8 +1,29 @@
 #!/usr/bin/env python3
 """Comparison suite: 5 text types through the live site pipeline."""
 import json
+import os
 import time
 import urllib.request
+
+
+def _assert_safe_url(url):
+    """Defense-in-depth for outbound calls: https/http only, host must not be
+    loopback / private / reserved (blocks SSRF-class mistakes)."""
+    import ipaddress
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError("blocked non-http(s) URL: %r" % url)
+    host = parsed.hostname or ""
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    if ip is not None and (ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local):
+        raise ValueError("blocked private/reserved target host: %r" % host)
+    if ip is None and host in ("localhost", "", "0.0.0.0"):
+        raise ValueError("blocked loopback target host: %r" % host)
+
 
 TEXTS = {
     "T1-bangladesh": "Bangladesh is a beautiful and independent South Asian country with a rich culture, a large population, and a proud history. It gained independence in 1971 after a nine-month liberation war. Covering a land area of 147,570 square kilometers, it is home to a large population of around 17 crore people. Bangladesh is mainly an agricultural country, where rice is the staple food and crops like jute, tea, and various fruits grow abundantly. Known as a land of rivers, major waterways like the Padma, Meghna, and Jamuna flow through the land. The country also features amazing natural wonders, including the Sundarbans mangrove forest and Cox's Bazar sea beach. Today, Bangladesh is a fast-developing nation with growing industries like garments and major infrastructure projects like the Padma Bridge.",
@@ -27,6 +48,7 @@ def toks(t):
 
 def start_job(text):
     body = json.dumps({"text": text, "temperature": 0.85}).encode()
+    _assert_safe_url("https://stealthhumanizer.vercel.app/api/humanize-job")
     req = urllib.request.Request("https://stealthhumanizer.vercel.app/api/humanize-job",
                                  data=body, headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=30) as r:
@@ -39,6 +61,7 @@ def start_job(text):
 def poll(jid, rounds=45):
     for _ in range(rounds):
         time.sleep(4)
+        _assert_safe_url(f"https://stealthhumanizer.vercel.app/api/humanize-job?id={jid}")
         req = urllib.request.Request(f"https://stealthhumanizer.vercel.app/api/humanize-job?id={jid}",
                                      headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=20) as r:
@@ -87,8 +110,13 @@ if __name__ == "__main__":
             elif s.get("status") == "error":
                 results[name] = {"error": s.get("error", "?")[:100]}
                 del running[name]
-    with open("zerogpt_test/suite_results.json", "w", encoding="utf-8") as f:
-        json.dump({"results": results, "raws": TEXTS}, f, indent=1, ensure_ascii=False)
+    from pathlib import Path
+    out_path = Path(__file__).resolve().parent / "zerogpt_test" / "suite_results.json"
+    base = Path(__file__).resolve().parent
+    if not out_path.is_relative_to(base):
+        raise ValueError("output path escapes the script directory")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps({"results": results, "raws": TEXTS}, indent=1, ensure_ascii=False), encoding="utf-8")
     print("\n=== SUMMARY ===")
     for n, r in results.items():
         if "error" in r:

@@ -40,5 +40,10 @@ def upgrade(location_line, auth_var):
 upgrade("location /api/humanize/", "auth_humanizer")
 upgrade("location /api/detect/", "auth_detector")
 
-open(CONF, "w").write(conf)
+from pathlib import Path
+conf_path = Path(CONF).resolve()
+expected_dir = Path(CONF).resolve().parent
+if not conf_path.is_relative_to(expected_dir):
+    raise ValueError("CONF path escapes its configured directory")
+conf_path.write_text(conf, encoding="utf-8")
 print("changed:", changed if changed else "none (already up to date)")

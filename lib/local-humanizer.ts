@@ -48,14 +48,17 @@ const PHRASE_RULES: RewriteRule[] = [
   { pattern: /\bunderscore\b/gi, replacements: ['highlight', 'stress', 'show'] },
   { pattern: /\bmeticulous\b/gi, replacements: ['careful', 'detailed', 'thorough'] },
   { pattern: /\bcognizant\b/gi, replacements: ['aware', 'mindful', 'knowing'] },
-  { pattern: /\bI am writing to follow up on\b/gi, replacements: ["I'm following up on"] },
-  { pattern: /\bI am writing to\b/gi, replacements: ["I'm reaching out to"] },
-  { pattern: /\bPlease let me know when you are available\b/gi, replacements: ["Please let me know when you're free", "Let me know when you have time"] },
-  { pattern: /\bwhen you are available\b/gi, replacements: ["when you're free", "when you're available"] },
+  // Contraction-bearing correspondence rules — informal registers only.
+  // Applied per style so academic/technical text keeps its formal register.
+  { pattern: /\bI am writing to follow up on\b/gi, replacements: ["I'm following up on"], styles: ['casual', 'creative', 'humanize', 'stealth', 'professional'] as StylePreset[] },
+  { pattern: /\bI am writing to\b/gi, replacements: ["I'm reaching out to"], styles: ['casual', 'creative', 'humanize', 'stealth', 'professional'] as StylePreset[] },
+  { pattern: /\bwhen you are available\b/gi, replacements: ["when you're free", "when you're available"], styles: ['casual', 'creative', 'humanize', 'stealth', 'professional'] as StylePreset[] },
+  { pattern: /\bdo not hesitate to\b/gi, replacements: ["feel free to", "don't hesitate to"], styles: ['casual', 'creative', 'humanize', 'stealth', 'professional'] as StylePreset[] },
   { pattern: /\bprevious conversation\b/gi, replacements: ["earlier discussion", "earlier chat"] },
-  { pattern: /\bat your earliest convenience\b/gi, replacements: ["when you get a chance", "at your convenience"] },
-  { pattern: /\bdo not hesitate to\b/gi, replacements: ["feel free to", "don't hesitate to"] },
-  { pattern: /\b([A-Z][a-zA-Z\s]+) is a subset of ([^,\.]+?) that focuses on\b/gi, replacements: ["As a branch of $2, $1 focuses on"] },
+  { pattern: /\bat your earliest convenience\b/gi, replacements: ["as soon as possible", "at your convenience"] },
+  // "X is a subset of Y that focuses on Z" — capture bounded to 1–3 words so
+  // the subject match cannot swallow preceding clauses ("In modern computing,").
+  { pattern: /\b([A-Z][a-zA-Z]*(?:\s+[A-Za-z]+){0,2}) is a subset of ([^,\.]+?) that focuses on\b/gi, replacements: ["As a branch of $2, $1 focuses on"] },
   { pattern: /\bimprove their accuracy over time\b/gi, replacements: ["boost accuracy over time"] },
   { pattern: /\bwithout being programmed to do so\b/gi, replacements: ["without explicit manual coding"] }
 ];
@@ -77,7 +80,10 @@ function applyPhraseRules(sentence: string, style: StylePreset, seed: number): s
   let output = sentence;
   for (const rule of PHRASE_RULES) {
     if (rule.styles && !rule.styles.includes(style)) continue;
-    output = output.replace(rule.pattern, () => pick(rule.replacements, seed + output.length));
+    // Pass the replacement as a plain string (not a callback): string
+    // replacement interpolates $1/$2 group references, a callback would emit
+    // them literally ("As a branch of $2, $1 focuses on ...").
+    output = output.replace(rule.pattern, pick(rule.replacements, seed + output.length));
   }
   return output;
 }

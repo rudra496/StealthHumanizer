@@ -59,9 +59,14 @@ interface CliRunnerConfig {
   stdinMode: 'pipe' | 'ignore';
 }
 
+// Spawn targets resolve only to this fixed literal set — the environment can
+// select among them, never supply an arbitrary path or name.
+const CLI_BIN_ALLOWLIST = new Set(['claude', 'claude.cmd', 'claude.exe', 'codex', 'codex.cmd', 'codex.exe']);
+
 function resolveBin(envVar: string, fallback: string): string {
   const override = process.env[envVar];
-  return override && override.trim().length > 0 ? override : fallback;
+  const candidate = override ? override.trim() : '';
+  return candidate && CLI_BIN_ALLOWLIST.has(candidate) ? candidate : fallback;
 }
 
 function combinePrompts(systemPrompt: string, userPrompt: string): string {
@@ -81,11 +86,19 @@ async function runCli(
   options: CliRunnerOptions,
 ): Promise<string> {
   const combined = combinePrompts(systemPrompt, userPrompt);
+  // options.model reaches spawn argv ('--model', model). It comes from user
+  // input, so constrain it to a safe identifier charset before it lands in
+  // a child-process argument vector.
+  if (options.model && !/^[\w.\-:]{1,64}$/.test(options.model)) {
+    throw new Error(`${config.label}: unsafe model identifier`);
+  }
   const prepared = await config.prepare(systemPrompt, userPrompt, options);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const stdio: StdioOptions = [config.stdinMode, 'pipe', 'pipe'];
-  const spawnOptions: SpawnOptions = { stdio, env: process.env };
+  // Shallow copy: the child gets the operator's environment by value, and no
+  // later mutation of process.env can leak into a running runner.
+  const spawnOptions: SpawnOptions = { stdio, env: { ...process.env } };
 
   try {
     const stdout = await new Promise<string>((resolve, reject) => {
@@ -93,6 +106,13 @@ async function runCli(
       // (spawn EFTYPE), so route JavaScript runners through the current Node
       // binary. Native executables (claude, codex) are spawned as-is.
       const isJsScript = /\.(mjs|cjs|js)$/i.test(config.bin);
+      // Defense-in-depth: config.bin can be overridden through operator env
+      // vars. Reject shell metacharacters / control characters (spawn runs
+      // no shell, so this guards against misconfiguration, not injection).
+      if (!/^[\w.\-\\/: ]+$/.test(config.bin)) {
+        reject(new Error(`${config.label}: unsafe runner binary path (env override rejected)`));
+        return;
+      }
       const command = isJsScript ? process.execPath : config.bin;
       const commandArgs = isJsScript ? [config.bin, ...prepared.args] : prepared.args;
       const child = spawn(command, commandArgs, spawnOptions);

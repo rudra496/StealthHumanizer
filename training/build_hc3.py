@@ -16,7 +16,8 @@ TARGET_HC3 = 4500
 try:
     from huggingface_hub import hf_hub_download
 except ImportError:
-    os.system(f"{sys.executable} -m pip install -q huggingface_hub")
+    import subprocess
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "huggingface_hub"], check=True)
     from huggingface_hub import hf_hub_download
 
 

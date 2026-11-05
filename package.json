@@ -41,10 +41,11 @@
     "pipeline:q1-ready": "node scripts/papers/complete-ready-pipeline.mjs",
     "pipeline:q1-ready:skip-install": "node scripts/papers/complete-ready-pipeline.mjs --skip-install",
     "test:roadmap": "tsx scripts/tests/roadmap-features.mjs",
+    "test:inversion": "tsx scripts/tests/academic-inversion.test.mjs",
     "screenshot": "node scripts/capture-screenshot.mjs",
     "test:v1-forwarding": "node scripts/tests/v1-forwarding.test.mjs",
     "test:security": "tsx scripts/tests/security-hardening.mjs",
-    "test": "npm run test:roadmap && npm run test:v1-forwarding && npm run test:security && npm run test:cli"
+    "test": "npm run test:roadmap && npm run test:v1-forwarding && npm run test:security && npm run test:inversion && npm run test:cli"
   },
   "dependencies": {
     "dotenv": "^18.0.9",

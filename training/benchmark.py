@@ -108,8 +108,11 @@ def main():
         }
         print(name, results[name])
 
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=1)
+    from pathlib import Path
+    out_path = Path(args.out).resolve()
+    if not out_path.is_relative_to(Path.cwd().resolve()):
+        raise ValueError("--out must stay inside the working directory")
+    out_path.write_text(json.dumps(results, indent=1), encoding="utf-8")
     print("saved", args.out)
 
 

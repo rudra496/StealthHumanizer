@@ -1,36 +1,16 @@
 import { detectAI } from './detector';
-import { getRandomSynonym } from './synonyms';
+import { applyHumanizeTransforms } from './humanize-transforms';
 
 // Conservative AI-phrase replacements for the offline re-humanize fallback.
 // Each maps to a clean, grammatical replacement (never an empty string, which
 // left dangling commas / lowercase sentence starts). Word-boundary safe.
+//
+// 2026-11-05: entries that fabricated context ("particularly in data
+// workflows", "achieving measurably stronger outcomes"), remapped verbs
+// ("has enabled" -> "accelerates"), or corrupted technical meaning
+// ("accuracy" -> "precision") were removed — nominalization inversions now
+// live in lib/humanize-transforms.ts, position-aware and verb-preserving.
 const AI_PHRASE_REPLACEMENTS: Array<[RegExp, string]> = [
-  // Correspondence & Communication
-  [/\bI am writing to follow up on\b/gi, "I'm following up on"],
-  [/\bI am writing to\b/gi, "I'm reaching out to"],
-  [/\bI would like to\b/gi, "I'd like to"],
-  [/\bPlease let me know when you are available\b/gi, "Please let me know when you're free"],
-  [/\bwhen you are available\b/gi, "when you're available"],
-  [/\bat your earliest convenience\b/gi, "when you get a chance"],
-  [/\bprevious conversation\b/gi, "earlier discussion"],
-  [/\bdo not hesitate to\b/gi, "feel free to"],
-  [/\bdue to the fact that\b/gi, "because"],
-  [/\bat this point in time\b/gi, "right now"],
-  [/\bfor the purpose of\b/gi, "for"],
-  [/\bwith regard to\b/gi, "regarding"],
-  [/\bin reference to\b/gi, "about"],
-  [/\btake into consideration\b/gi, "consider"],
-  [/\bmake a decision\b/gi, "decide"],
-  [/\bprovide assistance to\b/gi, "help"],
-  [/\bperform an analysis of\b/gi, "analyze"],
-  [/\bexhibits a tendency to\b/gi, "tends to"],
-
-  // Definitional & Structural openers: "X is a subset/branch of Y that focuses on Z"
-  [/\b([A-Z][a-zA-Z\s]+) is a subset of ([^,\.]+?) that focuses on\b/gi, "As a branch of $2, $1 focuses on"],
-  [/\b([A-Z][a-zA-Z\s]+) is a type of ([^,\.]+?) that\b/gi, "As a form of $2, $1"],
-  [/\bimprove their accuracy over time\b/gi, "boost accuracy over time"],
-  [/\bwithout being programmed to do so\b/gi, "without explicit manual coding"],
-
   [/\bFurthermore,?\s*/gi, 'Also, '],
   [/\bMoreover,?\s*/gi, 'Additionally, '],
   [/\bAdditionally,?\s*/gi, 'Also, '],
@@ -46,7 +26,8 @@ const AI_PHRASE_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bleveraging\b/gi, 'using'],
   [/\boptimi[sz]e[ds]?\b/gi, 'refine'],
   [/\bcomprehensive\b/gi, 'thorough'],
-  [/\bsignificant(?:ly)?\b/gi, 'notable'],
+  // "statistically significant" is a technical term — never swap it.
+  [/\b(?<!statistically )significant(?:ly)?\b/gi, 'notable'],
   [/\bsubstantial(?:ly)?\b/gi, 'considerable'],
   [/\bvarious\b/gi, 'different'],
   [/\bnumerous\b/gi, 'many'],
@@ -58,23 +39,6 @@ const AI_PHRASE_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bdemonstrates?\b/gi, 'shows'],
   [/\bin the modern era\b/gi, 'today'],
   [/\bAI implementations\b/gi, 'AI deployments'],
-  [/\bimplementations\b/gi, 'deployments'],
-  [/\btransparent, fair and accountable\b/gi, 'accountable, unbiased, and transparent'],
-  [/\bwith considerable accuracy\b/gi, 'with high precision'],
-  [/\bare capable of producing human-like text\b/gi, 'can generate human-grade prose'],
-  [/\bvirtually indistinguishable from content written by human authors\b/gi, 'closely mirroring human writing'],
-  [/\bhas shown considerable promise in the field of\b/gi, 'demonstrates substantial utility across'],
-  [/\bThe implementation of ([^,\.]+?) has enabled rapid developments in\b/gi, 'Deploying $1 — particularly in data workflows — has accelerated advances across'],
-  [/\bThe implementation of ([^,\.]+?) has enabled\b/gi, 'Deploying $1 has accelerated'],
-  [/\bThe use of ([^,\.]+?) has enabled businesses to\b/gi, 'Using $1 allows companies to'],
-  [/\bThe use of ([^,\.]+?) allows\b/gi, 'Using $1 enables'],
-  [/\bThe integration of ([^,\.]+?) requires careful consideration of\b/gi, 'Integrating $1 calls for deliberate attention to'],
-  [/\bThe integration of ([^,\.]+?) requires\b/gi, 'Integrating $1 calls for'],
-  [/\bThe potential impact on ([^,\.]+?) must (?:also )?be addressed through\b/gi, 'Potential disruptions to $1 also call for'],
-  [/\bThis capability has proven particularly useful in the area of\b/gi, 'Such functionality excels in'],
-  [/\bThis development is having a major influence on\b/gi, 'This transition substantially reshapes'],
-  [/\bBusinesses that use ([^,\.]+?) can refine operational workflows and achieve better results\b/gi, 'Enterprises adopting $1 can sharpen operations — achieving measurably stronger outcomes'],
-  [/\b(?:Businesses|Enterprises|Companies) that (?:use|utilize) ([^,\.]+?) can\b/gi, 'Companies adopting $1 can'],
 ];
 
 export function splitIntoSentencesStable(text: string): string[] {
@@ -133,7 +97,7 @@ function splitLongSentence(sentence: string): string {
   return `${first}. ${capitalizeStart(tail)}`;
 }
 
-export function localRehumanizeSentence(sentence: string, _index = 0): string {
+export function localRehumanizeSentence(sentence: string, _index = 0, opts?: { style?: string }): string {
   let rewritten = sentence.trim();
   for (const [pattern, replacement] of AI_PHRASE_REPLACEMENTS) {
     rewritten = rewritten.replace(pattern, replacement);
@@ -147,19 +111,10 @@ export function localRehumanizeSentence(sentence: string, _index = 0): string {
     .replace(/,\s+([.!?])/g, '$1')
     .trim();
 
-  // Natural safe contractions
-  rewritten = rewritten
-    .replace(/\bI am\b/g, "I'm")
-    .replace(/\byou are\b/g, "you're")
-    .replace(/\bwe are\b/g, "we're")
-    .replace(/\bthey are\b/g, "they're")
-    .replace(/\bdo not\b/g, "don't")
-    .replace(/\bdoes not\b/g, "doesn't")
-    .replace(/\bcannot\b/g, "can't")
-    .replace(/\bwill not\b/g, "won't")
-    .replace(/\bthere is\b/g, "there's")
-    .replace(/\bthat is\b/g, "that's")
-    .replace(/\bit is\b/g, "it's");
+  // Shared register-aware pass: adds contractions only for non-formal styles,
+  // and (when nothing above changed the sentence) applies a bounded
+  // adverb-only variation instead of the old random synonym roulette.
+  rewritten = applyHumanizeTransforms(rewritten, { style: opts?.style, maxAdverbSwaps: 1 });
 
   rewritten = splitLongSentence(rewritten);
   rewritten = capitalizeStart(rewritten);
@@ -171,23 +126,6 @@ export function localRehumanizeSentence(sentence: string, _index = 0): string {
     if (/,\s*(?:allowing|helping|especially|particularly)\b/i.test(rewritten)) {
       rewritten = rewritten.replace(/,\s*(allowing|helping|especially|particularly)\b/i, ' — $1');
     }
-  }
-
-  // If still identical to original sentence, force a synonym swap on words >= 4 letters
-  if (rewritten.toLowerCase() === sentence.trim().toLowerCase()) {
-    const rawTokens = rewritten.split(/(\s+)/);
-    let replaced = 0;
-    const transformed = rawTokens.map(w => {
-      if (/^[a-zA-Z]{4,}$/.test(w) && replaced < 2) {
-        const syn = getRandomSynonym(w.toLowerCase());
-        if (syn && syn.toLowerCase() !== w.toLowerCase()) {
-          replaced++;
-          return /^[A-Z]/.test(w) ? syn.charAt(0).toUpperCase() + syn.slice(1) : syn;
-        }
-      }
-      return w;
-    });
-    rewritten = transformed.join('');
   }
 
   // Fragment guard: if the rewrite collapsed to something too short or empty,
@@ -211,8 +149,13 @@ function scoreSentence(text: string): number {
  * Prefers the LLM rewrite on near-ties (it reads more naturally), and never
  * returns a candidate that is identical to the original or a fragment.
  */
-export function chooseImprovedRewrite(original: string, llmRewrite: string | undefined, index = 0): string {
-  const fallback = localRehumanizeSentence(original, index);
+export function chooseImprovedRewrite(
+  original: string,
+  llmRewrite: string | undefined,
+  index = 0,
+  style?: string
+): string {
+  const fallback = localRehumanizeSentence(original, index, { style });
   const originalScore = scoreSentence(original);
 
   // Completeness check: candidate must have ending punctuation and 4+ words
