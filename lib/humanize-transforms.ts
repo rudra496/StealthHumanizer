@@ -141,15 +141,19 @@ function nominalizationReplacer(match: string, article: string, noun: string, of
 }
 
 const SUFFIX_VERB_MAPS: Array<[RegExp, Record<string, string>]> = [
-  [/\butiliz(?:e|es|ed|ing)\b/gi, { e: 'use', es: 'uses', ed: 'used', ing: 'using' }],
-  [/\butilis(?:e|es|ed|ing)\b/gi, { e: 'use', es: 'uses', ed: 'used', ing: 'using' }],
-  [/\bleverag(?:e|es|ed|ing)\b/gi, { e: 'use', es: 'uses', ed: 'used', ing: 'using' }],
-  [/\bfacilitat(?:e|es|ed|ing)\b/gi, { e: 'help', es: 'helps', ed: 'helped', ing: 'helping' }],
-  [/\bstreamlin(?:e|es|ed|ing)\b/gi, { e: 'simplify', es: 'simplifies', ed: 'simplified', ing: 'simplifying' }],
+  // CAPTURING group: the replace callback receives the suffix as its second
+  // argument only when the group captures — a non-capturing group passes the
+  // match offset (a number) instead, which crashed .toLowerCase (2026-11-06).
+  [/\butiliz(e|es|ed|ing)\b/gi, { e: 'use', es: 'uses', ed: 'used', ing: 'using' }],
+  [/\butilis(e|es|ed|ing)\b/gi, { e: 'use', es: 'uses', ed: 'used', ing: 'using' }],
+  [/\bleverag(e|es|ed|ing)\b/gi, { e: 'use', es: 'uses', ed: 'used', ing: 'using' }],
+  [/\bfacilitat(e|es|ed|ing)\b/gi, { e: 'help', es: 'helps', ed: 'helped', ing: 'helping' }],
+  [/\bstreamlin(e|es|ed|ing)\b/gi, { e: 'simplify', es: 'simplifies', ed: 'simplified', ing: 'simplifying' }],
 ];
 
 function suffixVerbReplacer(map: Record<string, string>) {
-  return (match: string, suffix: string): string => {
+  return (match: string, suffix: unknown): string => {
+    if (typeof suffix !== 'string') return match;
     const replacement = map[suffix.toLowerCase()];
     return replacement ? replacement : match;
   };

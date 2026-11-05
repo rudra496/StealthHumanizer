@@ -135,6 +135,20 @@ test('expandContractions restores formal full forms', async () => {
   assert.equal(out, 'It is important to note that we do not know if it has been ready.');
 });
 
+test('suffix verb rules handle bare utilize/facilitate/leverage/streamline without crashing', async () => {
+  // Regression for the 2026-11-06 live 500 ("a.toLowerCase is not a
+  // function"): non-capturing groups passed the match offset to the replacer.
+  const out = applyHumanizeTransforms(
+    'Organizations utilize artificial intelligence and leverage data; this facilitates gains and streamlined workflows.',
+    { style: 'academic' }
+  );
+  assert.doesNotMatch(out, /\butiliz(e|es|ed|ing)\b/i, 'utilize family must be rewritten');
+  assert.doesNotMatch(out, /\bleverag(e|es|ed|ing)\b/i, 'leverage family must be rewritten');
+  assert.match(out, /use artificial intelligence/, 'utilize -> use (suffix e)');
+  const { sentenceLooksBroken } = await import('../../lib/humanize-transforms.ts');
+  assert.equal(sentenceLooksBroken(out), false);
+});
+
 test('localRehumanizeSentence respects register and keeps verbs intact', () => {
   const academic = localRehumanizeSentence(
     'It is important to note that the implementation of AI has enabled rapid developments in automation.',
