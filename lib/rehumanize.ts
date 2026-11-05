@@ -1,9 +1,36 @@
 import { detectAI } from './detector';
+import { getRandomSynonym } from './synonyms';
 
 // Conservative AI-phrase replacements for the offline re-humanize fallback.
 // Each maps to a clean, grammatical replacement (never an empty string, which
 // left dangling commas / lowercase sentence starts). Word-boundary safe.
 const AI_PHRASE_REPLACEMENTS: Array<[RegExp, string]> = [
+  // Correspondence & Communication
+  [/\bI am writing to follow up on\b/gi, "I'm following up on"],
+  [/\bI am writing to\b/gi, "I'm reaching out to"],
+  [/\bI would like to\b/gi, "I'd like to"],
+  [/\bPlease let me know when you are available\b/gi, "Please let me know when you're free"],
+  [/\bwhen you are available\b/gi, "when you're available"],
+  [/\bat your earliest convenience\b/gi, "when you get a chance"],
+  [/\bprevious conversation\b/gi, "earlier discussion"],
+  [/\bdo not hesitate to\b/gi, "feel free to"],
+  [/\bdue to the fact that\b/gi, "because"],
+  [/\bat this point in time\b/gi, "right now"],
+  [/\bfor the purpose of\b/gi, "for"],
+  [/\bwith regard to\b/gi, "regarding"],
+  [/\bin reference to\b/gi, "about"],
+  [/\btake into consideration\b/gi, "consider"],
+  [/\bmake a decision\b/gi, "decide"],
+  [/\bprovide assistance to\b/gi, "help"],
+  [/\bperform an analysis of\b/gi, "analyze"],
+  [/\bexhibits a tendency to\b/gi, "tends to"],
+
+  // Definitional & Structural openers: "X is a subset/branch of Y that focuses on Z"
+  [/\b([A-Z][a-zA-Z\s]+) is a subset of ([^,\.]+?) that focuses on\b/gi, "As a branch of $2, $1 focuses on"],
+  [/\b([A-Z][a-zA-Z\s]+) is a type of ([^,\.]+?) that\b/gi, "As a form of $2, $1"],
+  [/\bimprove their accuracy over time\b/gi, "boost accuracy over time"],
+  [/\bwithout being programmed to do so\b/gi, "without explicit manual coding"],
+
   [/\bFurthermore,?\s*/gi, 'Also, '],
   [/\bMoreover,?\s*/gi, 'Additionally, '],
   [/\bAdditionally,?\s*/gi, 'Also, '],
@@ -120,6 +147,20 @@ export function localRehumanizeSentence(sentence: string, _index = 0): string {
     .replace(/,\s+([.!?])/g, '$1')
     .trim();
 
+  // Natural safe contractions
+  rewritten = rewritten
+    .replace(/\bI am\b/g, "I'm")
+    .replace(/\byou are\b/g, "you're")
+    .replace(/\bwe are\b/g, "we're")
+    .replace(/\bthey are\b/g, "they're")
+    .replace(/\bdo not\b/g, "don't")
+    .replace(/\bdoes not\b/g, "doesn't")
+    .replace(/\bcannot\b/g, "can't")
+    .replace(/\bwill not\b/g, "won't")
+    .replace(/\bthere is\b/g, "there's")
+    .replace(/\bthat is\b/g, "that's")
+    .replace(/\bit is\b/g, "it's");
+
   rewritten = splitLongSentence(rewritten);
   rewritten = capitalizeStart(rewritten);
 
@@ -130,6 +171,23 @@ export function localRehumanizeSentence(sentence: string, _index = 0): string {
     if (/,\s*(?:allowing|helping|especially|particularly)\b/i.test(rewritten)) {
       rewritten = rewritten.replace(/,\s*(allowing|helping|especially|particularly)\b/i, ' — $1');
     }
+  }
+
+  // If still identical to original sentence, force a synonym swap on words >= 4 letters
+  if (rewritten.toLowerCase() === sentence.trim().toLowerCase()) {
+    const rawTokens = rewritten.split(/(\s+)/);
+    let replaced = 0;
+    const transformed = rawTokens.map(w => {
+      if (/^[a-zA-Z]{4,}$/.test(w) && replaced < 2) {
+        const syn = getRandomSynonym(w.toLowerCase());
+        if (syn && syn.toLowerCase() !== w.toLowerCase()) {
+          replaced++;
+          return /^[A-Z]/.test(w) ? syn.charAt(0).toUpperCase() + syn.slice(1) : syn;
+        }
+      }
+      return w;
+    });
+    rewritten = transformed.join('');
   }
 
   // Fragment guard: if the rewrite collapsed to something too short or empty,

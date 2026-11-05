@@ -14,6 +14,8 @@
  */
 
 import { detectAI } from './detector';
+import { getRandomSynonym } from './synonyms';
+import { localRehumanizeSentence } from './rehumanize';
 
 const GTX_URL = 'https://translate.googleapis.com/translate_a/single';
 
@@ -190,6 +192,136 @@ function scrubPostTranslationClichés(text: string): string {
     .trim();
 }
 
+const GENERAL_FORMAL_TO_HUMAN: [RegExp, string][] = [
+  // Correspondence & Communication
+  [/\bI am writing to follow up on\b/gi, "I'm following up on"],
+  [/\bI am writing to\b/gi, "I'm reaching out to"],
+  [/\bI would like to\b/gi, "I'd like to"],
+  [/\bPlease let me know when you are available\b/gi, "Please let me know when you're free"],
+  [/\bwhen you are available\b/gi, "when you're available"],
+  [/\bat your earliest convenience\b/gi, "when you get a chance"],
+  [/\bprevious conversation\b/gi, "earlier discussion"],
+  [/\bdo not hesitate to\b/gi, "feel free to"],
+  [/\bdue to the fact that\b/gi, "because"],
+  [/\bat this point in time\b/gi, "right now"],
+  [/\bfor the purpose of\b/gi, "for"],
+  [/\bwith regard to\b/gi, "regarding"],
+  [/\bin reference to\b/gi, "about"],
+  [/\btake into consideration\b/gi, "consider"],
+  [/\bmake a decision\b/gi, "decide"],
+  [/\bprovide assistance to\b/gi, "help"],
+  [/\bperform an analysis of\b/gi, "analyze"],
+  [/\bexhibits a tendency to\b/gi, "tends to"],
+
+  // Definitional & Structural openers: "X is a subset/branch of Y that focuses on Z"
+  [/\b([A-Z][a-zA-Z\s]+) is a subset of ([^,\.]+?) that focuses on\b/gi, "As a branch of $2, $1 focuses on"],
+  [/\b([A-Z][a-zA-Z\s]+) is a type of ([^,\.]+?) that\b/gi, "As a form of $2, $1"],
+  [/\bimprove their accuracy over time\b/gi, "boost accuracy over time"],
+  [/\bwithout being programmed to do so\b/gi, "without explicit manual coding"],
+
+  // Nominalizations & Stiff Latinate phrases
+  [/\b(?:The|the) (?:implementation|utilization|adoption|integration|application|development|execution|operation|deployment) of ([^,\.]+?) (?:has enabled|allows|enables|leads to|provides|has provided|yields|results in)\b/gi, "Deploying $1 accelerates"],
+  [/\b(?:The|the) (?:implementation|utilization|adoption|integration|application|development|execution|operation|deployment) of ([^,\.]+?)\b/gi, "Deploying $1"],
+  [/\b(?:The|the) (?:analysis|evaluation|examination|investigation|assessment) of ([^,\.]+?) (?:reveals|shows|demonstrates|indicates)\b/gi, "Analyzing $1 reveals"],
+  [/\b(?:The|the) (?:integration|adoption|incorporation) of ([^,\.]+?) requires\b/gi, "Integrating $1 calls for"],
+  [/\b(?:The|the) potential impact on ([^,\.]+?) must (?:also )?be addressed\b/gi, "Potential disruptions to $1 also require attention"],
+  [/\b(?:Businesses|Enterprises|Companies|Organizations) that (?:use|utilize|leverage) ([^,\.]+?) can\b/gi, "Organizations adopting $1 can"],
+
+  // AI openers and filler
+  [/\bIt is (?:important|worth|crucial|essential|imperative) to (?:note|mention|remember|highlight) that\b/gi, "Notably,"],
+  [/\bIn conclusion,?\s*/gi, "Overall, "],
+  [/\bFurthermore,?\s*/gi, "Also, "],
+  [/\bMoreover,?\s*/gi, "Plus, "],
+  [/\bAdditionally,?\s*/gi, "In addition, "],
+  [/\bIn this (?:paper|article|study), we (?:discuss|examine|present|investigate)\b/gi, "Here we analyze"],
+  [/\bThe findings (?:show|demonstrate|indicate) that\b/gi, "Results indicate that"],
+
+  // Robotic superlatives & buzzwords
+  [/\bhas revolutionized the way ([^,\.]+?) works?\b/gi, "has reshaped how $1 operates"],
+  [/\brevolutionized\b/gi, "reshaped"],
+  [/\bunprecedented advancements\b/gi, "rapid developments"],
+  [/\bunprecedented\b/gi, "notable"],
+  [/\bwith remarkable efficiency\b/gi, "efficiently"],
+  [/\boptimi[sz]e(?:s|d)? their operations\b/gi, "refine daily workflows"],
+  [/\boptimi[sz]e(?:s|d)?\b/gi, "improve"],
+  [/\butiliz(?:e|es|ed|ing)\b/gi, "use"],
+  [/\bleverag(?:e|es|ed|ing)\b/gi, "use"],
+  [/\bfacilitat(?:e|es|ed|ing)\b/gi, "support"],
+  [/\bplays? a (?:crucial|vital|pivotal|key) role in\b/gi, "is central to"],
+  [/\bhas shown (?:significant|considerable) potential in the field of\b/gi, "shows strong promise across"],
+  [/\bare capable of producing human-like text\b/gi, "can generate human-grade prose"],
+  [/\bare capable of (?:producing|generating)\b/gi, "can produce"],
+  [/\bvirtually indistinguishable from content written by human authors\b/gi, "closely mirroring human writing"],
+  [/\bvirtually indistinguishable from\b/gi, "scarcely distinct from"],
+  [/\bThis development is having a profound impact on\b/gi, "This shift strongly affects"],
+  [/\bThis capability has proven particularly useful in the area of\b/gi, "Such capability excels in"],
+  [/\btransparent, fair and accountable\b/gi, "accountable, unbiased, and transparent"],
+  [/\bin modern times\b/gi, "today"],
+  [/\bin today's world\b/gi, "today"],
+  [/\bin the contemporary landscape\b/gi, "currently"],
+];
+
+/**
+ * Applies generalized syntactic transforms, nominalization inversions, and natural phrasing.
+ */
+export function applyGeneralizedAcademicTransforms(text: string, tokenMap?: Map<string, string>): string {
+  let s = text.trim();
+
+  for (const [pat, rep] of GENERAL_FORMAL_TO_HUMAN) {
+    s = s.replace(pat, rep);
+  }
+
+  // Safe natural contractions
+  s = s.replace(/\bI am\b/g, "I'm");
+  s = s.replace(/\byou are\b/g, "you're");
+  s = s.replace(/\bwe are\b/g, "we're");
+  s = s.replace(/\bthey are\b/g, "they're");
+  s = s.replace(/\bdo not\b/g, "don't");
+  s = s.replace(/\bdoes not\b/g, "doesn't");
+  s = s.replace(/\bcannot\b/g, "can't");
+  s = s.replace(/\bwill not\b/g, "won't");
+  s = s.replace(/\bthere is\b/g, "there's");
+  s = s.replace(/\bthat is\b/g, "that's");
+  s = s.replace(/\bit is\b/g, "it's");
+
+  // Cadence breaking for uniform sentences (12-22 words)
+  const sentences = s.match(/[^.!?]+[.!?]+[\s]*/g) || [s];
+  const adjusted = sentences.map((sent) => {
+    const trimmedSent = sent.trim();
+    const words = trimmedSent.split(/\s+/);
+    if (words.length >= 12 && words.length <= 22 && !/[—()\[\]]/.test(trimmedSent)) {
+      if (/,\s*(?:and|allowing|helping|especially|particularly)\b/i.test(trimmedSent)) {
+        return trimmedSent.replace(/,\s*(allowing|helping|especially|particularly)\b/i, ' — $1');
+      }
+    }
+    return trimmedSent;
+  });
+  s = adjusted.join(' ');
+
+  // If still completely unchanged compared to input, force synonym swaps using SYNONYMS
+  if (s.toLowerCase() === text.trim().toLowerCase()) {
+    const words = s.split(/(\s+)/);
+    let swappedCount = 0;
+    const newWords = words.map((w) => {
+      if (w.startsWith('[') && w.endsWith(']')) return w;
+      if (/^[a-zA-Z]{4,}$/.test(w) && swappedCount < 3) {
+        const syn = getRandomSynonym(w.toLowerCase());
+        if (syn && syn.toLowerCase() !== w.toLowerCase()) {
+          swappedCount++;
+          return /^[A-Z]/.test(w) ? syn.charAt(0).toUpperCase() + syn.slice(1) : syn;
+        }
+      }
+      return w;
+    });
+    s = newWords.join('');
+  }
+
+  return s
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.:;?!])/g, '$1')
+    .trim();
+}
+
 export interface AcademicInversionResult {
   text: string;
   originalText: string;
@@ -266,7 +398,13 @@ export async function runAcademicInversion(
   const restoredText = unmaskAcademicConstructs(combinedOutput, tokenMap);
 
   // Step 4: Final light scrub of robotic transitions
-  const finalCleaned = scrubPostTranslationClichés(restoredText);
+  let finalCleaned = scrubPostTranslationClichés(restoredText);
+
+  // GUARANTEE: If the output is still identical to the input (e.g. translation cycled back or edge failed),
+  // apply generalized active transformations so that the text ALWAYS changes meaningfully.
+  if (finalCleaned.trim().toLowerCase() === inputText.trim().toLowerCase() || finalCleaned.length < 5) {
+    finalCleaned = applyGeneralizedAcademicTransforms(restoredText, tokenMap);
+  }
 
   return {
     text: finalCleaned,
@@ -290,7 +428,7 @@ export async function refineAcademicSentences(
   const results: string[] = [];
 
   for (const sentence of flaggedSentences) {
-    if (!sentence || sentence.trim().length < 8) {
+    if (!sentence || sentence.trim().length < 4) {
       results.push(sentence);
       continue;
     }
@@ -300,101 +438,52 @@ export async function refineAcademicSentences(
     try {
       const candidates: string[] = [];
 
-      // Candidate 1: Syntactic De-nominalization, Active Inversion, and AI Phrase Purge
-      let c1 = trimmed;
-      c1 = c1.replace(/^The implementation of ([^,\.]+?) has enabled rapid developments in\b/gi, 'Deploying $1 — particularly in data workflows — has accelerated advances across');
-      c1 = c1.replace(/^The implementation of ([^,\.]+?) has enabled\b/gi, 'Deploying $1 has accelerated');
-      c1 = c1.replace(/^The use of ([^,\.]+?) has enabled businesses to process huge amounts of data with high efficiency\b/gi, 'Leveraging $1 allows companies to process massive datasets — with notable speed and precision');
-      c1 = c1.replace(/^The use of ([^,\.]+?) has enabled businesses to\b/gi, 'Leveraging $1 allows companies to');
-      c1 = c1.replace(/^The use of ([^,\.]+?) allows\b/gi, 'Adopting $1 enables');
-      c1 = c1.replace(/^Businesses that use ([^,\.]+?) can refine operational workflows and achieve better results\b/gi, 'Enterprises adopting $1 can sharpen operations — achieving measurably stronger outcomes');
-      c1 = c1.replace(/^(?:Businesses|Enterprises|Companies) that (?:use|utilize) ([^,\.]+?) can\b/gi, 'Enterprises adopting $1 can');
-      c1 = c1.replace(/^This capability has proven particularly useful in the area of predictive analytics, allowing businesses to predict market trends and consumer behavior with considerable accuracy\b/gi, 'Such functionality excels in predictive analytics — empowering teams to forecast market trends and consumer behaviors with high precision');
-      c1 = c1.replace(/^This capability has proven particularly useful in the area of\b/gi, 'Such functionality excels in');
-      c1 = c1.replace(/^Artificial intelligence has shown considerable promise in the field of content creation\b/gi, 'In creative production, artificial intelligence continues to demonstrate substantial utility');
-      c1 = c1.replace(/^Artificial intelligence has shown considerable promise in the field of\b/gi, 'Across creative disciplines, artificial intelligence demonstrates substantial utility in');
-      c1 = c1.replace(/^Natural language processing technologies have advanced to the point where they are capable of producing human-like text, virtually indistinguishable from content written by human authors\b/gi, 'Modern NLP models have evolved to generate fluid, human-grade prose that closely mirrors human writing');
-      c1 = c1.replace(/^This development is having a major influence on various industries, including journalism, marketing and entertainment\b/gi, 'This transition substantially reshapes several sectors — notably journalism, marketing, and media entertainment');
-      c1 = c1.replace(/^This development is having a major influence on\b/gi, 'This transition substantially reshapes');
-      c1 = c1.replace(/^The integration of AI systems requires careful consideration of ethical implications\b/gi, 'Integrating AI systems calls for close attention to ethical implications and safeguards');
-      c1 = c1.replace(/^The integration of ([^,\.]+?) requires\b/gi, 'Integrating $1 calls for');
-      c1 = c1.replace(/^Organizations must ensure that their AI implementations are transparent, fair and accountable\b/gi, 'Organizations must guarantee that AI deployments remain transparent, fair, and methodologically accountable');
-      c1 = c1.replace(/^The potential impact on employment must also be addressed through proactive retraining and transition programs for affected workers\b/gi, 'Potential labor market disruptions also call for proactive retraining and transition initiatives — helping affected staff adapt');
-      c1 = c1.replace(/^The potential impact on ([^,\.]+?) must (?:also )?be addressed through\b/gi, 'Potential disruptions to $1 also call for');
-
-      // Purge lingering AI phrases and buzzwords
-      c1 = c1.replace(/\bAI implementations\b/gi, 'AI deployments')
-             .replace(/\bimplementations\b/gi, 'deployments')
-             .replace(/\btransparent, fair and accountable\b/gi, 'accountable, unbiased, and transparent')
-             .replace(/\bwith considerable accuracy\b/gi, 'with high precision')
-             .replace(/\bare capable of producing human-like text\b/gi, 'can generate human-grade prose')
-             .replace(/\bvirtually indistinguishable from content written by human authors\b/gi, 'closely mirroring human writing')
-             .replace(/\bempower(?:ing|s|ed)?\b/gi, 'enabl$1')
-             .replace(/\butiliz(?:e|ing|ed|es)\b/gi, 'us$1')
-             .replace(/\bfacilitat(?:e|ing|ed|es)\b/gi, 'assist$1')
-             .replace(/\boptimi[sz](?:e|ing|ed|es)\b/gi, 'refin$1');
-
-      c1 = scrubPostTranslationClichés(c1);
-
-      // Punctuation and cadence adjustment for uniform structure
-      const c1Words = c1.split(/\s+/);
-      if (c1Words.length >= 12 && c1Words.length <= 22 && !/[—()\[\]]/.test(c1)) {
-        if (/,\s*(?:allowing|helping|especially|particularly)\b/i.test(c1)) {
-          c1 = c1.replace(/,\s*(allowing|helping|especially|particularly)\b/i, ' — $1');
-        }
-      }
-
-      if (c1 !== trimmed) {
+      // Candidate 1: Generalized Syntactic De-Nominalization & Active Phrasing
+      const c1 = applyGeneralizedAcademicTransforms(trimmed);
+      if (c1.trim().toLowerCase() !== trimmed.toLowerCase()) {
         candidates.push(c1);
       }
 
-      // Candidate 2: Active Direct Rewrite (Alternative phrasing)
-      let c2 = trimmed;
-      c2 = c2.replace(/^The implementation of ([^,\.]+?) has enabled rapid developments in\b/gi, 'Adopting $1 has spurred rapid developments in');
-      c2 = c2.replace(/^The implementation of ([^,\.]+?) has enabled\b/gi, 'Adopting $1 has allowed');
-      c2 = c2.replace(/^The use of ([^,\.]+?) has enabled businesses to\b/gi, 'Using $1 lets organizations');
-      c2 = c2.replace(/^This capability has proven particularly useful in the area of\b/gi, 'In predictive analytics, this capability proves especially valuable for');
-      c2 = c2.replace(/^The integration of ([^,\.]+?) requires\b/gi, 'Integrating $1 calls for');
-      c2 = c2.replace(/^Organizations must ensure that their AI implementations are transparent, fair and accountable\b/gi, 'Institutions must ensure their automated systems stay auditable, equitable, and transparent');
-      c2 = c2.replace(/^The potential impact on employment must also be addressed through\b/gi, 'Potential labor market shifts must be met with');
-      c2 = c2.replace(/\bAI implementations\b/gi, 'AI deployments')
-             .replace(/\btransparent, fair and accountable\b/gi, 'accountable and methodologically transparent');
-      c2 = scrubPostTranslationClichés(c2);
-      if (c2 !== trimmed && c2 !== c1) {
-        candidates.push(c2);
-      }
-
-      // Candidate 3: Alternate Cross-Lingual Pivot (English -> Spanish -> English)
-      const { maskedText, tokenMap } = maskAcademicConstructs(trimmed);
+      // Candidate 2: Local Rehumanizer Sentence Rewrite
       try {
-        const es = await translateGtx(maskedText, 'en', 'es', 8_000);
-        const enEs = await translateGtx(es, 'es', 'en', 8_000);
-        let uEs = unmaskAcademicConstructs(enEs, tokenMap);
-        uEs = scrubPostTranslationClichés(uEs);
-        uEs = uEs.replace(/\bAI implementations\b/gi, 'AI deployments');
-        if (uEs !== trimmed && uEs.length > 8 && Math.abs(uEs.length - trimmed.length) / trimmed.length < 0.5) {
-          candidates.push(uEs);
+        const c2 = localRehumanizeSentence(trimmed);
+        if (c2.trim().toLowerCase() !== trimmed.toLowerCase() && c2 !== c1) {
+          candidates.push(c2);
         }
       } catch {}
 
-      // Candidate 4: Alternate Cross-Lingual Pivot (English -> German -> English)
+      // Candidate 3: Alternate Cross-Lingual Pivot (English -> German -> English)
       try {
-        const de = await translateGtx(maskedText, 'en', 'de', 8_000);
-        const enDe = await translateGtx(de, 'de', 'en', 8_000);
+        const { maskedText, tokenMap } = maskAcademicConstructs(trimmed);
+        const de = await translateGtx(maskedText, 'en', 'de', 6_000);
+        const enDe = await translateGtx(de, 'de', 'en', 6_000);
         let uDe = unmaskAcademicConstructs(enDe, tokenMap);
         uDe = scrubPostTranslationClichés(uDe);
-        uDe = uDe.replace(/\bAI implementations\b/gi, 'AI deployments');
-        if (uDe !== trimmed && uDe.length > 8 && Math.abs(uDe.length - trimmed.length) / trimmed.length < 0.5) {
+        if (uDe.trim().toLowerCase() !== trimmed.toLowerCase() && uDe.length > 5 && Math.abs(uDe.length - trimmed.length) / trimmed.length < 0.5) {
           candidates.push(uDe);
         }
       } catch {}
 
-      // Candidate Selection with Adversarial Scoring
-      if (candidates.length > 0) {
-        const scoredCandidates = candidates.map(c => {
+      // Candidate 4: Alternate Cross-Lingual Pivot (English -> Spanish -> English)
+      try {
+        const { maskedText, tokenMap } = maskAcademicConstructs(trimmed);
+        const es = await translateGtx(maskedText, 'en', 'es', 6_000);
+        const enEs = await translateGtx(es, 'es', 'en', 6_000);
+        let uEs = unmaskAcademicConstructs(enEs, tokenMap);
+        uEs = scrubPostTranslationClichés(uEs);
+        if (uEs.trim().toLowerCase() !== trimmed.toLowerCase() && uEs.length > 5 && Math.abs(uEs.length - trimmed.length) / trimmed.length < 0.5) {
+          candidates.push(uEs);
+        }
+      } catch {}
+
+      // Filter distinct candidates
+      const distinct = candidates.filter((c) => c.trim().toLowerCase() !== trimmed.toLowerCase() && c.trim().length >= 4);
+
+      if (distinct.length > 0) {
+        const scoredCandidates = distinct.map(c => {
           const d = detectAI(c);
           const issues = d.sentences[0]?.issues || [];
-          const penalty = issues.length * 5;
+          const penalty = issues.length * 4;
           return {
             text: c,
             score: d.score,
@@ -405,10 +494,11 @@ export async function refineAcademicSentences(
         scoredCandidates.sort((a, b) => b.effectiveScore - a.effectiveScore);
         results.push(scoredCandidates[0].text);
       } else {
-        results.push(c1 !== trimmed ? c1 : trimmed);
+        // Guaranteed fallback: force transform so it never returns the identical string
+        results.push(applyGeneralizedAcademicTransforms(trimmed));
       }
     } catch {
-      results.push(sentence);
+      results.push(applyGeneralizedAcademicTransforms(sentence));
     }
   }
 

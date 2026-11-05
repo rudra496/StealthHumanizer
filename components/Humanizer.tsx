@@ -334,7 +334,10 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           if (stData?.status === 'error') throw new Error(stData?.error || 'Humanization failed');
         }
         if (!rd) throw new Error('Humanization timed out — please try again');
-        const fullText: string = rd.humanized || inputText;
+        const rawFullText: string = rd.humanized || '';
+        const fullText: string = (rawFullText && rawFullText.trim().toLowerCase() !== inputText.trim().toLowerCase())
+          ? rawFullText
+          : localHumanizeText(inputText, { style });
         const det = detectAI(fullText);
         const sents = buildSentenceResults(inputText, fullText).map((row: any, i: number) => ({
           original: row.original, humanized: row.humanized, alternatives: [] as string[],

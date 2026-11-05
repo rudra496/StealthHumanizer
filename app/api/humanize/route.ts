@@ -11,6 +11,7 @@ import { calibrateWithCorpus } from '@/lib/detector';
 import { chainModels } from '@/lib/chain';
 import { humanizeWithRudra, isRudraHumanizerConfigured } from '@/lib/server/rudra-free';
 import { runAcademicInversion } from '@/lib/academic-inversion';
+import { localHumanizeText } from '@/lib/local-humanizer';
 import {
   appendAuditLog,
   applyRewriteRegressionGuard,
@@ -253,7 +254,7 @@ export async function POST(request: NextRequest) {
     // actively degrades gemma's text — running it would mangle contractions,
     // re-introduce AI fingerprints, and shorten the output. Bypass every
     // post-LLM layer for Rudra and let the API output stand on its own.
-    if (!isRudraFree && !isProAcademic) {
+    if (!isRudraFree) {
       // ==================== LAYER 2: Post-Processing ====================
       // Always apply corpus-aware post-processing if model is loaded
       if (useCorpus) {
@@ -333,8 +334,11 @@ export async function POST(request: NextRequest) {
     // delivers natural text and adding deterministic rewrites on top actively
     // hurts the detector score.
     let finalText: string;
-    if (isRudraFree || isProAcademic) {
+    if (isRudraFree) {
       finalText = currentText;
+    } else if (isProAcademic) {
+      finalText = intensity === 'light' ? currentText : intensityPostprocess(currentText, intensity, { style: style as any });
+      finalText = scrubAIText(finalText);
     } else {
       const guard = applyRewriteRegressionGuard({
         // Compare the postprocessed candidate against the RAW LLM output, not the
@@ -372,6 +376,20 @@ export async function POST(request: NextRequest) {
           finalText = intensityPostprocess(finalText, 'aggressive', { style: style as any });
         }
       }
+      finalText = scrubAIText(finalText);
+    }
+
+    // GUARANTEED NON-ZERO TRANSFORMATION GUARD:
+    // If for any reason (e.g. edge translation cycled back to identical English words,
+    // or an upstream provider returned verbatim input), the text was NOT changed:
+    if (finalText.trim().toLowerCase() === text.trim().toLowerCase()) {
+      const fallbackLocal = localHumanizeText(text, { style: style as any });
+      const fallbackPolished = postprocess(fallbackLocal, {
+        light: false,
+        style: style as any,
+        synonymIntensity: Math.max(synonymIntensity, 25),
+      });
+      finalText = intensityPostprocess(fallbackPolished, intensity || 'aggressive', { style: style as any });
       finalText = scrubAIText(finalText);
     }
     const finalDetection = detectAI(finalText);

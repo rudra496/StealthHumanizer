@@ -47,7 +47,17 @@ const PHRASE_RULES: RewriteRule[] = [
   { pattern: /\belucidate\b/gi, replacements: ['explain', 'clarify', 'show'] },
   { pattern: /\bunderscore\b/gi, replacements: ['highlight', 'stress', 'show'] },
   { pattern: /\bmeticulous\b/gi, replacements: ['careful', 'detailed', 'thorough'] },
-  { pattern: /\bcognizant\b/gi, replacements: ['aware', 'mindful', 'knowing'] }
+  { pattern: /\bcognizant\b/gi, replacements: ['aware', 'mindful', 'knowing'] },
+  { pattern: /\bI am writing to follow up on\b/gi, replacements: ["I'm following up on"] },
+  { pattern: /\bI am writing to\b/gi, replacements: ["I'm reaching out to"] },
+  { pattern: /\bPlease let me know when you are available\b/gi, replacements: ["Please let me know when you're free", "Let me know when you have time"] },
+  { pattern: /\bwhen you are available\b/gi, replacements: ["when you're free", "when you're available"] },
+  { pattern: /\bprevious conversation\b/gi, replacements: ["earlier discussion", "earlier chat"] },
+  { pattern: /\bat your earliest convenience\b/gi, replacements: ["when you get a chance", "at your convenience"] },
+  { pattern: /\bdo not hesitate to\b/gi, replacements: ["feel free to", "don't hesitate to"] },
+  { pattern: /\b([A-Z][a-zA-Z\s]+) is a subset of ([^,\.]+?) that focuses on\b/gi, replacements: ["As a branch of $2, $1 focuses on"] },
+  { pattern: /\bimprove their accuracy over time\b/gi, replacements: ["boost accuracy over time"] },
+  { pattern: /\bwithout being programmed to do so\b/gi, replacements: ["without explicit manual coding"] }
 ];
 
 function hashText(input: string): number {
