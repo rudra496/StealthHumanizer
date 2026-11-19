@@ -77,6 +77,7 @@ GRAMMAR_SYSTEM_PROMPT = (
 
 state: dict = {}
 jobs: dict = {}
+_bart_running = asyncio.Lock()  # one BART decode box-wide at any time
 
 
 # ============================== core logic ==============================
@@ -210,8 +211,10 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
 
     tasks = [asyncio.ensure_future(_one_gemma_sample(text, t)) for t in temps]
 
-    # v6 BART candidate (CPU, ~5-15s): self-trained on pronoun-free casual
-    # technical pairs — adds style diversity to the ranking pool.
+    # v6 BART candidate (self-trained on pronoun-free casual technical pairs):
+    # generated POST-gemma, only while job budget remains. Concurrent BART+gemma
+    # saturates the 4 ARM cores and pushes every gemma sample past budget
+    # (all-fail -> echo ships), so BART never runs in parallel with the batch.
     bart_tok = state.get("bart_tokenizer")
     bart_mdl = state.get("bart_model")
 
@@ -222,17 +225,12 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
         try:
             enc = bart_tok(text, return_tensors="pt", truncation=True, max_length=512)
             with torch.no_grad():
-                gen = bart_mdl.generate(**enc, max_length=700, num_beams=4,
+                gen = bart_mdl.generate(**enc, max_length=700, num_beams=2,
                                         no_repeat_ngram_size=3, early_stopping=True)
             outs.append(bart_tok.decode(gen[0], skip_special_tokens=True).strip())
         except Exception:
             logger.exception("BART candidate generation failed")
         return [o for o in outs if o]
-
-    if bart_mdl is not None:
-        bart_task = asyncio.ensure_future(asyncio.to_thread(_bart_candidates))
-    else:
-        bart_task = None
 
     done, pending = await asyncio.wait(tasks, timeout=JOB_BUDGET_S)
     for t in pending:
@@ -245,13 +243,27 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
             continue
         if p:
             cands.append(p)
-    if bart_task is not None:
-        # HARD CAP on BART: under CPU contention a 406M beam search can crawl
-        # for many minutes — never let it hold the job hostage.
-        try:
-            cands.extend(await asyncio.wait_for(bart_task, timeout=60))
-        except Exception:
-            logger.warning("BART candidates skipped (timeout/error)")
+
+    # Post-hoc BART: non-blocking lock (max one decode box-wide, a lingering
+    # to_thread decode releases the lock when it finishes), hard 25s cap, and
+    # never started unless the gemma batch left >= 25s of budget. Losing the
+    # BART candidate costs nothing — it is one extra style variant in the pool.
+    if bart_mdl is not None:
+        remaining = JOB_BUDGET_S - (time.perf_counter() - t0)
+        if remaining >= 25:
+            try:
+                await asyncio.wait_for(_bart_running.acquire(), timeout=0.05)
+            except (asyncio.TimeoutError, TimeoutError):
+                logger.info("BART candidate skipped (lock busy)")
+            else:
+                try:
+                    cands.extend(await asyncio.wait_for(
+                        asyncio.to_thread(_bart_candidates), timeout=25))
+                    logger.info("BART candidate included (remaining=%.1fs)", remaining)
+                except Exception:
+                    logger.info("BART candidate skipped (timeout/error, remaining=%.1fs)", remaining)
+                finally:
+                    _bart_running.release()
     if not cands:
         logger.error("all %d samples failed within %ss budget", n, JOB_BUDGET_S)
         cands = [text]
@@ -416,6 +428,7 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
         (r"\bfacilitate\b", "help"), (r"\bfacilitates\b", "helps"),
         (r"\bfacilitated\b", "helped"),
         (r"\butilize(?:s|d)?\b", "use"), (r"\bcomprehensive\b", "complete"),
+        (r"\bComprehensive\b", "Complete"), (r"\bUnprecedented\b", "Record"),
         (r"\bfundamentally\b", "basically"), (r"\bparadigm shift\b", "big change"),
         (r"\btransformative\b", "major"), (r"\bholistic\b", "complete"),
     ]
@@ -551,10 +564,10 @@ async def lifespan(_: FastAPI):
     t0 = time.perf_counter()
     state["detector_tokenizer"], state["detector_model"] = _load_detector()
     state["detector2_tokenizer"], state["detector2_model"] = _load_detector2()
-    # BART candidate DISABLED: concurrent BART+gemma saturates the 4 ARM
-    # cores, pushing every gemma sample past the 100s budget (all-fail ->
-    # echo ships). Gemma-only candidates rank better anyway under the
-    # style-signal scorer. The v6 model stays on disk at /models/v6_model.
+    # BART candidate model (v6, self-trained): loaded when BART_MODEL_ID points
+    # at its directory. Used POST-gemma only (see _run_humanize) — concurrent
+    # BART+gemma saturated the 4 ARM cores and pushed gemma samples past budget.
+    state["bart_tokenizer"], state["bart_model"] = _load_bart()
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
