@@ -101,6 +101,29 @@ test('casual and professional styles allow correspondence contractions', () => {
   assert.doesNotMatch(formal, /I'm/);
 });
 
+// 2026-11-19 live defects: opener removal already capitalized the next word,
+// which stopped the connective rule ([a-z] capture) from firing and shipped
+// "Furthermore, Machine learning ..." with a dangling robotic connective.
+test('connective is dropped even when an earlier rule capitalized the word', () => {
+  const out = applyHumanizeTransforms(
+    'Furthermore, it is important to note that machine learning algorithms play a crucial role in enhancing productivity.',
+    { style: 'academic' }
+  );
+  assert.doesNotMatch(out, /\bFurthermore\b/i, 'robotic connective must not survive opener removal');
+  assert.match(out, /^Machine learning algorithms are central to/, 'sentence must start with the real subject');
+});
+
+// Case-insensitive phrase swaps can leave a lowercase sentence start
+// ("Delving into ..." -> "examining ..." once the opener was dropped).
+test('sentence starts stay capitalized after case-insensitive phrase swaps', () => {
+  const out = applyHumanizeTransforms(
+    'Additionally, delving into comprehensive data analysis enables stakeholders to make informed decisions.',
+    { style: 'academic' }
+  );
+  assert.match(out, /^Examining comprehensive data analysis/, 'sentence start must be re-capitalized');
+  assert.doesNotMatch(out, /^(?:Additionally|Furthermore|Moreover)\b/i, 'no robotic connective may remain');
+});
+
 test('sentenceLooksBroken vetoes mechanical defects without false-positives on good prose', () => {
   assert.equal(sentenceLooksBroken('We examine$1 the data.'), true, 'literal $N injection');
   assert.equal(sentenceLooksBroken('He looked of of the window.'), true, 'doubled preposition');

@@ -56,7 +56,9 @@ HUMANIZE_SYSTEM_PROMPT = (
     "4. Use simple, everyday words and contractions (it's, don't, you're) where natural.\n"
     "5. Replace AI clichés: furthermore, moreover, additionally, delve, tapestry, navigate, complexities, "
     "in the realm of, it is important to note, a testament to, underscores, vibrant, multifaceted, "
-    "unprecedented, crucial, pivotal, fostering, leveraging.\n"
+    "unprecedented, crucial, pivotal, fostering, leveraging, plays a crucial role, digital landscape, "
+    "cutting-edge, revolutionary, streamlined, seamless, robust, game-changer, ever-evolving, "
+    "in today's fast-paced world.\n"
     "6. Use casual transitions where they fit (but, so, then, anyway).\n"
     "7. Do NOT add personal pronouns or fillers that are not in the original: I, me, my, we, us, our, "
     "you, your, you'll, 'you know', folks. Mild spoken words (basically, really) are fine. Write about "
@@ -383,30 +385,48 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
 
     # Global AI-cliché scrub: the strongest detector signals are stock
     # phrases. Deterministic removal/replacement on the final output.
+    # Curly apostrophes normalized first so contraction forms match.
+    out = out.replace("\u2019", "'").replace("\u2018", "'")
     _SCRUB = [
-        (r"\bIt is important to note that\b", ""), (r"\bit is important to note that\b", ""),
-        (r"\bIt is worth noting that\b", ""), (r"\bit is worth noting that\b", ""),
-        (r"\bIt is widely (?:acknowledged|recognized) that\b", ""),
-        (r"\bit is widely (?:acknowledged|recognized) that\b", ""),
-        (r"\bIt is essential to recognize that\b", ""), (r"\bit is essential to recognize that\b", ""),
-        (r"\bIt is important to highlight that\b", ""), (r"\bit is important to highlight that\b", ""),
+        (r"\b(?:It|it)(?:'s)?\s+(?:also\s+)?important to (?:note|highlight) that\b", ""),
+        (r"\b(?:It|it)(?:'s)?\s+(?:also\s+)?worth noting that\b", ""),
+        (r"\b(?:It|it)(?:'s)?\s+(?:also\s+)?essential to (?:note|recognize) that\b", ""),
+        (r"\b(?:It|it)(?:'s)?\s+widely (?:acknowledged|recognized) that\b", ""),
         (r"\bIn conclusion,?\s*", ""), (r"\bUltimately,?\s*", ""),
         (r"\bFurthermore,?\s*", "Also, "), (r"\bMoreover,?\s*", "Plus, "),
         (r"\bAdditionally,?\s*", "And "), (r"\bConsequently,?\s*", "So "),
+        (r"\bIn today's fast-paced world,?\s*", "These days, "),
+        (r"\bfast-paced (?:digital )?landscape\b", "market"),
+        (r"\bcutting-edge\b", "new"),
+        (r"\brevolutioniz(?:e|es|ed|ing)\b", "changed"),
+        (r"\bplays a (?:crucial|vital|pivotal|key) role in\b", "matters a lot for"),
+        (r"\bplay a (?:crucial|vital|pivotal|key) role in\b", "matter a lot for"),
+        (r"\ba (?:crucial|vital|pivotal) role\b", "a big part"),
+        (r"\bstreamlined\b", "simplified"), (r"\bstreamline\b", "simplify"),
+        (r"\bseamless(?:ly)?\b", "smooth"), (r"\brobust\b", "solid"),
+        (r"\bgame-changer\b", "big deal"), (r"\bever-evolving\b", "changing"),
+        (r"\bharness(?:es|ed|ing)?\b", "use"),
         (r"\bprecipitated\b", "caused"), (r"\bcascading\b", "chained"),
         (r"\bunprecedented\b", "record"), (r"\bmultifaceted\b", "varied"),
         (r"\bunderscore[sd]?\b", "show"), (r"\bdelve into\b", "dig into"),
         (r"\bfoster(?:ing|s|ed)?\b", "support"), (r"\bleverag(?:ing|e|es|ed)\b", "use"),
         (r"\bpivotal role\b", "key part"), (r"\bin the realm of\b", "in"),
         (r"\ba testament to\b", "proof of"), (r"\bvibrant\b", "lively"),
-        (r"\bnavigat(?:e|ing) the\b", "handle the"), (r"\bfacilitate(?:s|d)?\b", "helps"),
+        (r"\bnavigate the\b", "handle the"), (r"\bnavigating the\b", "handling the"),
+        (r"\bfacilitate\b", "help"), (r"\bfacilitates\b", "helps"),
+        (r"\bfacilitated\b", "helped"),
         (r"\butilize(?:s|d)?\b", "use"), (r"\bcomprehensive\b", "complete"),
         (r"\bfundamentally\b", "basically"), (r"\bparadigm shift\b", "big change"),
         (r"\btransformative\b", "major"), (r"\bholistic\b", "complete"),
     ]
     for pat, rep in _SCRUB:
         out = re.sub(pat, rep, out)
+    # gemma emits en-dashes; humans type hyphens or commas. Letters only so a
+    # numeric range like 2020-2021 survives untouched.
+    out = re.sub(r"([a-zA-Z])\s*\u2013\s*([a-zA-Z])", r"\1, \2", out)
     out = re.sub(r"\s{2,}", " ", out).strip()
+    out = re.sub(r" ([,.;:!?])", r"\1", out)               # space before punct left by removals
+    out = re.sub(r",\s*([.!?])", r"\1", out)               # dangling comma before sentence end
     out = re.sub(r"^(?:[,.]|\bAnd\b|\bAlso\b)\s*", "", out)  # sentence-start cleanup
     out = ". ".join(x[:1].upper() + x[1:] for x in out.split(". ") if x.strip())
     if out and out[-1] not in ".!?":

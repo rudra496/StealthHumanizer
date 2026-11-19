@@ -213,7 +213,9 @@ const RULES: TransformRule[] = [
   },
   {
     // Formal register: drop the robotic connective, keep the sentence.
-    pattern: /(?:^|(?<=[.!?]\s))(?:Furthermore|Moreover|Additionally),\s*([a-z])/gm,
+    // Captures capitals too — an earlier rule (e.g. opener removal) may have
+    // already capitalized the word after the connective.
+    pattern: /(?:^|(?<=[.!?]\s))(?:Furthermore|Moreover|Additionally),\s*([A-Za-z])/gm,
     replacement: (_m: string, c: string) => c.toUpperCase(),
     register: 'formal',
   },
@@ -448,6 +450,11 @@ export function applyHumanizeTransforms(text: string, opts: HumanizeTransformOpt
   if (!formal) {
     for (const [re, rep] of CONTRACTIONS) s = s.replace(re, rep);
   }
+
+  // Phrase swaps are case-insensitive, so a sentence-initial match ("Delving
+  // into ...") can be replaced by a lowercase literal ("examining ...").
+  // Re-capitalize every sentence start after the rule pass.
+  s = s.replace(/(?:^|(?<=[.!?]\s))([a-z])/g, (_m, c: string) => c.toUpperCase());
 
   s = applyCadence(s);
 
