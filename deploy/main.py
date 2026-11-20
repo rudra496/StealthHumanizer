@@ -48,22 +48,26 @@ JOB_TTL_S = 900          # finished jobs pruned after 15 min
 MAX_RUNNING_JOBS = 2     # protect the free ARM box
 
 HUMANIZE_SYSTEM_PROMPT = (
-    "You are an AI text humanizer. Rewrite the user's text so it reads like a real person wrote it. "
+    "You are a professional text humanizer. Rewrite the user's text so it reads like a competent "
+    "human professional wrote it. "
     "RULES:\n"
     "1. Preserve ALL meaning, facts, names, numbers, code, URLs, and citations.\n"
     "2. Keep the approximate length — do NOT summarize or shorten.\n"
-    "3. Vary sentence length and structure (mix short and long).\n"
-    "4. Use simple, everyday words and contractions (it's, don't, you're) where natural.\n"
+    "3. Vary sentence length and structure: mix short direct sentences (5-9 words) with longer "
+    "ones; never keep every sentence the same rhythm.\n"
+    "4. Plain professional voice. No chatty padding (really, absolutely, pretty, lots of, anyway, "
+    "you know) and no corporate buzzwords. Every sentence must carry real information.\n"
     "5. Replace AI clichés: furthermore, moreover, additionally, delve, tapestry, navigate, complexities, "
     "in the realm of, it is important to note, a testament to, underscores, vibrant, multifaceted, "
     "unprecedented, crucial, pivotal, fostering, leveraging, plays a crucial role, digital landscape, "
     "cutting-edge, revolutionary, streamlined, seamless, robust, game-changer, ever-evolving, "
     "in today's fast-paced world.\n"
-    "6. Use casual transitions where they fit (but, so, then, anyway).\n"
+    "6. Use ordinary connectives where they fit (but, so, and, then).\n"
     "7. Do NOT add personal pronouns or fillers that are not in the original: I, me, my, we, us, our, "
-    "you, your, you'll, 'you know', folks. Mild spoken words (basically, really) are fine. Write about "
+    "you, your, you'll, 'you know', folks. Write about "
     "the subject, not the reader or writer.\n"
-    "8. Output ONLY the rewritten text. No preamble. No explanation. No quotes around the output."
+    "8. A few contractions are natural; do not contract every verb.\n"
+    "9. Output ONLY the rewritten text. No preamble. No explanation. No quotes around the output."
 )
 
 GRAMMAR_SYSTEM_PROMPT = (
@@ -75,6 +79,15 @@ GRAMMAR_SYSTEM_PROMPT = (
     "4. Output ONLY the corrected text. No preamble. No explanation. No quotes."
 )
 
+POLISH_SYSTEM_PROMPT = (
+    "You are a copy editor. Fix grammar, spelling, punctuation, verb-agreement errors, and comma "
+    "splices (split them into separate sentences) in the user's text. RULES:\n"
+    "1. Do NOT change wording, style, or meaning beyond these fixes.\n"
+    "2. Preserve ALL facts, numbers, and names exactly.\n"
+    "3. Keep the same length and sentence order.\n"
+    "4. Output ONLY the corrected text. No preamble. No explanation. No quotes."
+)
+
 state: dict = {}
 jobs: dict = {}
 _bart_running = asyncio.Lock()  # one BART decode box-wide at any time
@@ -82,13 +95,13 @@ _bart_running = asyncio.Lock()  # one BART decode box-wide at any time
 
 # ============================== core logic ==============================
 
-async def _one_gemma_sample(text: str, temp: float) -> str:
+async def _one_gemma_sample(text: str, temp: float, system: str = HUMANIZE_SYSTEM_PROMPT) -> str:
     payload = {
         "model": LONG_MODEL,
         "stream": False,
         "keep_alive": -1,
         "messages": [
-            {"role": "system", "content": HUMANIZE_SYSTEM_PROMPT},
+            {"role": "system", "content": system},
             {"role": "user", "content": text},
         ],
         "options": {"temperature": temp, "top_p": 0.95,
@@ -292,18 +305,25 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
                 "foster", "leverag", "in the realm of", "a testament to",
                 "crucial", "comprehensive", "facilitate", "utilize")
 
+    # Chatty padding — the #1 remaining register defect ("so it's pretty
+    # important", "really highlighting"). Penalised so a padded candidate
+    # never beats a clean one in the ranking.
+    _PADDING = ("really", "absolutely", "pretty important", "lots of",
+                "anyway", "you know", "very much so")
+
     def _style_score(c: str) -> float:
         words = max(1, len(c.split()))
         low = c.lower()
         cliche = sum(1 for ph in _CLICHES if ph in low)
+        padding = sum(1 for ph in _PADDING if re.search(rf"\b{re.escape(ph)}\b", low))
         sents = [s for s in re.split(r"(?<=[.!?])\s+", c) if len(s.split()) > 2]
         lens = [len(s.split()) for s in sents]
         mean_len = sum(lens) / len(lens) if lens else words
         var = sum((x - mean_len) ** 2 for x in lens) / len(lens) if len(lens) > 1 else 0
         burst = (var ** 0.5) / mean_len if mean_len else 0
         contr = len(re.findall(r"\b\w+(?:'|(?:\u2019))(?:s|t|re|ve|ll|d|m)\b", c, re.I))
-        # lower is better: cliché density penalised, burstiness rewarded
-        return (cliche / words * 100) - burst - min(contr, 4) * 0.5
+        # lower is better: cliché + padding density penalised, burstiness rewarded
+        return ((cliche + padding) / words * 100) - burst - min(contr, 4) * 0.5
 
     def _rank_key(c: str) -> tuple:
         return (round(_style_score(c), 2), round(_ensemble_ai_prob(c), 2))
@@ -432,18 +452,40 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
         (r"\bfundamentally\b", "basically"), (r"\bparadigm shift\b", "big change"),
         (r"\btransformative\b", "major"), (r"\bholistic\b", "complete"),
     ]
-    for pat, rep in _SCRUB:
-        out = re.sub(pat, rep, out)
-    # gemma emits en-dashes; humans type hyphens or commas. Letters only so a
-    # numeric range like 2020-2021 survives untouched.
-    out = re.sub(r"([a-zA-Z])\s*\u2013\s*([a-zA-Z])", r"\1, \2", out)
-    out = re.sub(r"\s{2,}", " ", out).strip()
-    out = re.sub(r" ([,.;:!?])", r"\1", out)               # space before punct left by removals
-    out = re.sub(r",\s*([.!?])", r"\1", out)               # dangling comma before sentence end
-    out = re.sub(r"^(?:[,.]|\bAnd\b|\bAlso\b)\s*", "", out)  # sentence-start cleanup
-    out = ". ".join(x[:1].upper() + x[1:] for x in out.split(". ") if x.strip())
-    if out and out[-1] not in ".!?":
-        out += "."
+    def _scrub_and_tidy(s: str) -> str:
+        for pat, rep in _SCRUB:
+            s = re.sub(pat, rep, s)
+        # gemma emits en-dashes; humans type hyphens or commas. Letters only so a
+        # numeric range like 2020-2021 survives untouched.
+        s = re.sub(r"([a-zA-Z])\s*\u2013\s*([a-zA-Z])", r"\1, \2", s)
+        s = re.sub(r"\s{2,}", " ", s).strip()
+        s = re.sub(r" ([,.;:!?])", r"\1", s)               # space before punct left by removals
+        s = re.sub(r",\s*([.!?])", r"\1", s)               # dangling comma before sentence end
+        s = re.sub(r"^(?:[,.]|\bAnd\b|\bAlso\b)\s*", "", s)  # sentence-start cleanup
+        s = ". ".join(x[:1].upper() + x[1:] for x in s.split(". ") if x.strip())
+        if s and s[-1] not in ".!?":
+            s += "."
+        return s
+
+    out = _scrub_and_tidy(out)
+
+    # Grammar/register polish on the winner: fix verb agreement, comma splices
+    # and punctuation with a copy-editor prompt. Time-guarded (only with >=55s
+    # of job budget left) and acceptance-gated (F1 >= 0.75 vs the winner, no
+    # digits lost, no pronouns added, no length blowout) — otherwise the
+    # winner ships unchanged. The scrub re-runs on the polished text so the
+    # copy editor cannot sneak a cliché back in.
+    if out and (JOB_BUDGET_S - (time.perf_counter() - t0)) >= 55:
+        try:
+            polished = await _one_gemma_sample(out, 0.25, system=POLISH_SYSTEM_PROMPT)
+            p = _clean_candidate(polished) if polished else ""
+            if (p and p != out and 0.6 <= len(p) / max(1, len(out)) <= 1.25
+                    and _f1_vs(out, p) >= 0.75 and not _added_pronouns(out, p)):
+                out = _scrub_and_tidy(p)
+                logger.info("grammar polish accepted (delta_chars=%d)", len(p) - len(out))
+        except Exception:
+            logger.exception("grammar polish pass failed")
+
     out_ai_prob = _ensemble_ai_prob(out) if out else 1.0
     if len(out) >= 2 and out[0] == out[-1] and out[0] in ('"', "'", "`"):
         out = out[1:-1].strip()
