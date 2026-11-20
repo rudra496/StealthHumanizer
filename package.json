@@ -45,7 +45,8 @@
     "screenshot": "node scripts/capture-screenshot.mjs",
     "test:v1-forwarding": "node scripts/tests/v1-forwarding.test.mjs",
     "test:security": "tsx scripts/tests/security-hardening.mjs",
-    "test": "npm run test:roadmap && npm run test:v1-forwarding && npm run test:security && npm run test:inversion && npm run test:cli"
+    "test:unit": "vitest run",
+    "test": "npm run test:unit && npm run test:roadmap && npm run test:v1-forwarding && npm run test:security && npm run test:inversion && npm run test:cli"
   },
   "dependencies": {
     "dotenv": "^18.0.10",
@@ -63,13 +64,15 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vitest/coverage-v8": "^5.1.1",
     "autoprefixer": "^10.6.2",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.4.6",
     "postcss": "^8.5.25",
     "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^5.1.1"
   },
   "description": "Free open-source AI text humanizer with style-aware rewriting",
   "license": "MIT",
