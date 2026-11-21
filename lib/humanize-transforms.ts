@@ -165,7 +165,7 @@ interface TransformRule {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   replacement: string | ((...args: any[]) => string);
   /** 'formal' rules are safe in every register; 'casual' rules are skipped for academic/technical styles. */
-  register?: 'formal' | 'casual';
+  register?: 'formal' | 'casual' | 'formal-only';
 }
 
 const RULES: TransformRule[] = [
@@ -217,7 +217,7 @@ const RULES: TransformRule[] = [
     // already capitalized the word after the connective.
     pattern: /(?:^|(?<=[.!?]\s))(?:Furthermore|Moreover|Additionally),\s*([A-Za-z])/gm,
     replacement: (_m: string, c: string) => c.toUpperCase(),
-    register: 'formal',
+    register: 'formal-only',
   },
   {
     pattern: /\bFurthermore,?\s*/gi,
@@ -443,6 +443,7 @@ export function applyHumanizeTransforms(text: string, opts: HumanizeTransformOpt
   let s = text;
   for (const rule of RULES) {
     if (rule.register === 'casual' && formal) continue;
+    if (rule.register === 'formal-only' && !formal) continue;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     s = s.replace(rule.pattern, rule.replacement as any);
   }

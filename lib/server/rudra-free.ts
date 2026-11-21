@@ -33,7 +33,7 @@ let cachedBase: { url: string; at: number } | null = null;
 const HUMANIZE_TIMEOUT_MS = 110_000;
 const DETECT_TIMEOUT_MS = 15_000;
 
-function primaryBase(): string {
+export function primaryBase(): string {
   const env = (process.env.RUDRA_API_BASE_URL || '').trim();
   // The production Vercel project still carries a legacy RUDRA_API_BASE_URL
   // pointing at the sslip.io host whose ports OCI now blocks — treat that as
