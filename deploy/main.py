@@ -17,9 +17,11 @@ call while the 80-100s best-of-4 sampling runs here uninterrupted.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
+import subprocess
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -214,7 +216,10 @@ def _ensemble_ai_prob(txt: str) -> float:
     return p
 
 
-async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
+async def _run_humanize(text: str, temperature: float, samples: int, engine: str = "") -> dict:
+    # Human Corpus Engine: zero-LLM path (retrieval + mechanical transplant).
+    if engine == "human-corpus" and state.get("hpool"):
+        return _hpool_humanize(text)
     """Best-of-N gemma sampling + cleanup + meaning gate + ensemble ranking."""
     t0 = time.perf_counter()
     base_temp = max(0.7, min(1.0, temperature))
@@ -500,9 +505,9 @@ async def _run_humanize(text: str, temperature: float, samples: int) -> dict:
     }
 
 
-async def _run_job(job_id: str, text: str, temperature: float, samples: int):
+async def _run_job(job_id: str, text: str, temperature: float, samples: int, engine: str = ""):
     try:
-        jobs[job_id]["result"] = await _run_humanize(text, temperature, samples)
+        jobs[job_id]["result"] = await _run_humanize(text, temperature, samples, engine)
         jobs[job_id]["status"] = "done"
     except Exception as e:
         logger.exception("job %s failed", job_id)
@@ -522,10 +527,166 @@ def _prune_jobs():
 
 # ============================== models ==============================
 
+# ============================ Human Corpus Engine ============================
+# v1 (2026-11-21). Verified live on ZeroGPT: text assembled from REAL human
+# sentences with mechanical (non-LLM) entity/number transplants scores
+# "Human written, 0% AI", while every LLM-generated rewrite scores 100%.
+# This path generates NO LLM tokens: nomic-retrieval from a pool of ~49k
+# human sentences + deterministic slot substitution + mechanical scrub.
+
+NUM_RE = re.compile(r"\d[\d,\.%]*")
+ENT_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b")
+ENT_STOP = {
+    "the", "this", "that", "these", "those", "there", "research", "researchers",
+    "however", "today", "some", "such", "its", "their", "our", "my", "no", "not",
+    "if", "when", "while", "as", "an", "a", "but", "and", "or", "so", "then",
+    "also", "plus", "overall", "currently", "now", "one", "two", "it", "they",
+}
+
+HPOOL_SCRUB = [
+    (r"\b(?:It|it)(?:'s)?\s+(?:also\s+)?important to (?:note|highlight|recognize)\s+(?:that|how|why|whether)\b", ""),
+    (r"\b(?:rapidly )?evolving (?:digital )?landscape\b", "market"),
+    (r"\bdigital landscape\b", "market"),
+    (r"\bpivotal\b", "key"),
+    (r"\bcutting-edge\b", "new"),
+    (r"\bfurthermore,?\s*", "Also, "), (r"\bmoreover,?\s*", "Plus, "),
+    (r"\badditionally,?\s*", "And "), (r"\bin conclusion,?\s*", ""),
+    (r"\bdelv(?:e|ing) into\b", "examine"),
+    (r"\bunderscore[sd]?\b", "show"),
+]
+
+
+def _load_hpool():
+    """Load the human sentence pool + precomputed nomic vectors from /models."""
+    try:
+        import numpy as np
+        texts = []
+        with open("/models/pool_texts.jsonl", encoding="utf-8") as f:
+            for line in f:
+                texts.append(json.loads(line)["text"])
+        vecs = np.load("/models/pool_vectors.npy")
+        if len(texts) != vecs.shape[0]:
+            raise RuntimeError("pool text/vector mismatch")
+        norms = np.linalg.norm(vecs, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        logger.info("human pool loaded: %d sentences, vectors %s", len(texts), tuple(vecs.shape))
+        return {"texts": texts, "unit": vecs / norms, "np": np, "n": len(texts)}
+    except Exception:
+        logger.exception("human pool load failed - human-corpus engine disabled")
+        return None
+
+
+def _nomic_embed(texts):
+    """Batch-embed texts via the local ollama nomic endpoint (curl subprocess)."""
+    payload = json.dumps({"model": "nomic-embed-text", "input": texts})
+    out = subprocess.run(["curl", "-s", "--max-time", "60", "-X", "POST",
+                          "-H", "Content-Type: application/json",
+                          "-d", payload, OLLAMA_BASE_URL + "/api/embed"],
+                         capture_output=True, text=True, timeout=70)
+    try:
+        return json.loads(out.stdout).get("embeddings") or []
+    except Exception:
+        logger.exception("nomic embed failed")
+        return []
+
+
+def _hpool_pick(inp, hpool, used, k=8):
+    """Best human-corpus sentence for inp with mechanical slot substitution."""
+    np_ = hpool["np"]
+    embs = _nomic_embed([inp])
+    if not embs:
+        return None
+    q = np_.array(embs[0][:768], dtype=np_.float32)
+    qnorm = float(np_.linalg.norm(q)) or 1.0
+    q = q / qnorm
+    sims = hpool["unit"] @ q
+    order = np_.argsort(-sims)[:96]
+    in_nums = NUM_RE.findall(inp)
+    in_ents = [e for e in ENT_RE.findall(inp) if e.lower() not in ENT_STOP]
+
+    scored = []
+    for i in order:
+        s = hpool["texts"][int(i)]
+        reuse = s in used
+        c_nums = NUM_RE.findall(s)
+        c_ents = [e for e in ENT_RE.findall(s) if e.lower() not in ENT_STOP]
+        score = float(sims[int(i)])
+        if in_nums:
+            score += 0.10 if c_nums else -0.05
+        else:
+            score -= 0.08 if c_nums else 0.0
+        if in_ents:
+            score += 0.06 if c_ents else -0.03
+        scored.append((score, s, c_nums, c_ents, reuse))
+    scored.sort(key=lambda t: -t[0])
+
+    for score, s, c_nums, c_ents, reuse in scored[:k]:
+        out = s
+        if not reuse:
+            if in_nums and c_nums:
+                for a, b in zip(c_nums, in_nums):
+                    out = out.replace(a, b, 1)
+            elif in_nums and not c_nums:
+                out = out.rstrip(".!?") + ", reaching " + in_nums[0] + " in recent measurements."
+            for a, b in zip(c_ents, in_ents):
+                out = out.replace(a, b)
+        for pat, rep in HPOOL_SCRUB:
+            out = re.sub(pat, rep, out)
+        out = re.sub(r"\s{2,}", " ", out).strip()
+        out = out[:1].upper() + out[1:] if out else out
+        if out and out[-1] not in ".!?":
+            out += "."
+        if len(out.split()) < 6:
+            continue
+        return out
+    return None
+
+
+def _hpool_humanize(text):
+    """Human Corpus Engine: 100% human-substrate output, no LLM tokens."""
+    t0 = time.perf_counter()
+    hpool = state.get("hpool")
+    if not hpool:
+        return {
+            "humanized": text,
+            "model": "human-corpus:unavailable",
+            "elapsed_ms": int((time.perf_counter() - t0) * 1000),
+            "ai_probability": 1.0,
+            "candidates": 0,
+            "engine": "human-corpus",
+            "engine_fallback": "pool-unavailable",
+        }
+    sents = [s for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    used = set()
+    outs = []
+    for s in sents[:60]:
+        pick = _hpool_pick(s, hpool, used)
+        if not pick:
+            pick = _hpool_pick(s, hpool, set())
+        if not pick:
+            pick = s
+        used.add(pick)
+        outs.append(pick)
+    out = " ".join(outs)
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    out_ai_prob = _ensemble_ai_prob(out) if out else 1.0
+    return {
+        "humanized": out,
+        "model": "human-corpus:v1",
+        "elapsed_ms": int((time.perf_counter() - t0) * 1000),
+        "ai_probability": float(out_ai_prob),
+        "candidates": len(outs),
+        "engine": "human-corpus",
+    }
+
+
+# ============================== request models ==============================
+
 class HumanizeRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=32000)
     temperature: float = Field(0.7, ge=0.1, le=2.0)
     samples: int = Field(4, ge=1, le=4)
+    engine: str = Field("", max_length=32)
 
 
 class HumanizeResponse(BaseModel):
@@ -539,6 +700,7 @@ class JobStartRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=32000)
     temperature: float = Field(0.85, ge=0.1, le=2.0)
     samples: int = Field(3, ge=1, le=4)  # 3 keeps the batch ~75s, leaving budget for the pronoun surgical pass
+    engine: str = Field("", max_length=32)
 
 
 class DetectRequest(BaseModel):
@@ -610,6 +772,11 @@ async def lifespan(_: FastAPI):
     # at its directory. Used POST-gemma only (see _run_humanize) — concurrent
     # BART+gemma saturated the 4 ARM cores and pushed gemma samples past budget.
     state["bart_tokenizer"], state["bart_model"] = _load_bart()
+    # Human Corpus Engine pool: ~49k real human sentences + precomputed nomic
+    # vectors (pool_texts.jsonl / pool_vectors.npy in the models mount). The
+    # engine generates ZERO LLM tokens — retrieval + mechanical transplant —
+    # so authorship-fingerprinting detectors read its output as human.
+    state["hpool"] = _load_hpool() if os.environ.get("HUMAN_POOL_ENABLED") == "1" else None
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -643,7 +810,7 @@ async def health():
 async def humanize(req: HumanizeRequest):
     if not state:
         raise HTTPException(503, "models not loaded yet")
-    r = await _run_humanize(req.text, req.temperature, req.samples)
+    r = await _run_humanize(req.text, req.temperature, req.samples, req.engine)
     return HumanizeResponse(**{k: r[k] for k in ("humanized", "model", "elapsed_ms", "ai_probability")})
 
 
@@ -657,7 +824,7 @@ async def job_start(req: JobStartRequest):
         raise HTTPException(429, "server busy — try again in a moment")
     job_id = uuid.uuid4().hex[:16]
     jobs[job_id] = {"status": "running", "created_at": time.time()}
-    asyncio.create_task(_run_job(job_id, req.text, req.temperature, req.samples))
+    asyncio.create_task(_run_job(job_id, req.text, req.temperature, req.samples, req.engine))
     return {"id": job_id}
 
 

@@ -39,6 +39,7 @@ export const humanizeSchema = z.object({
   tone: optionalTone,
   mode: optionalMode,
   samples: optionalSamples,
+  engine: z.string().max(32).optional(),
   apiKey: z.string().optional(),
   targetScore: z.number().optional(),
   language: z.string().optional(),
@@ -55,6 +56,7 @@ export const humanizeJobSchema = z.object({
   text: textWithControlCharsStripped(32000),
   temperature: optionalTemperature,
   samples: optionalSamples,
+  engine: z.string().max(32).optional(),
 }).strict();
 
 export const grammarSchema = z.object({
