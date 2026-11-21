@@ -6,32 +6,26 @@ import { checkGrammarLocally, normalizeGrammarPayload, parseFirstJsonObject } fr
 import { grammarCheckWithRudra, isRudraHumanizerConfigured } from '@/lib/server/rudra-free';
 import { ModelProvider } from '@/lib/types';
 import { checkRateLimit } from '@/lib/rate-limit';
+import { grammarSchema, logRequestError, parseJsonBody, validationError } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
+  const parsedRequest = await parseJsonBody(request, grammarSchema);
+  if (!parsedRequest.ok) {
+    logRequestError(parsedRequest.requestId, parsedRequest.code, parsedRequest.message);
+    return NextResponse.json(validationError(parsedRequest.code, parsedRequest.message, parsedRequest.requestId), { status: parsedRequest.status });
+  }
+  const requestId = parsedRequest.requestId;
   try {
     // Rate limiting
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
     const rateLimit = checkRateLimit(ip);
     if (!rateLimit.allowed) {
       return NextResponse.json(
-        { success: false, error: 'Rate limit exceeded. Please try again later.' },
+        validationError('rate_limited', 'Rate limit exceeded. Please try again later.', requestId),
         { status: 429 },
       );
     }
-
-    // Body size guard
-    const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
-    if (contentLength > 2_000_000) {
-      return NextResponse.json({ success: false, error: 'Request body too large.' }, { status: 413 });
-    }
-
-    const { text, model, apiKey } = await request.json();
-    if (!text || typeof text !== 'string' || text.trim().length === 0) {
-      return NextResponse.json({ success: false, error: 'text is required' }, { status: 400 });
-    }
-    if (text.length > 50000) {
-      return NextResponse.json({ success: false, error: 'Text exceeds 50,000 character limit' }, { status: 400 });
-    }
+    const { text, model, apiKey } = parsedRequest.data;
 
     if (!model || (!apiKey && model !== 'rudra-free')) {
       const local = checkGrammarLocally(text);
@@ -39,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (isCliOnlyProvider(model as ModelProvider)) {
-      return NextResponse.json({ success: false, error: `Provider "${model}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
+      return NextResponse.json(validationError('invalid_input', `Provider "${model}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.`, requestId), { status: 400 });
     }
 
     // Stealth Pro Academic & Privacy Mode: deterministic local grammar check
@@ -81,7 +75,7 @@ export async function POST(request: NextRequest) {
       const modelId = providerInfo?.defaultModel || model;
       const result = await generateWithProvider(
         model as ModelProvider,
-        apiKey,
+        apiKey || '',
         GRAMMAR_CHECK_SYSTEM_PROMPT,
         text,
         { temperature: 0.1, maxTokens: 2048, model: modelId }
@@ -102,6 +96,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, ...local, warning: 'Could not parse LLM grammar JSON; used local fallback.' });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error';
-    return NextResponse.json({ success: false, error: process.env.NODE_ENV === 'development' ? message : 'Internal error' }, { status: 500 });
+    logRequestError(requestId, 'internal', message);
+    return NextResponse.json(validationError('internal', process.env.NODE_ENV === 'development' ? message : 'Internal error', requestId), { status: 500 });
   }
 }
