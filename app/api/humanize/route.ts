@@ -25,6 +25,13 @@ import { countWords, chunkText } from '@/lib/storage';
 import { buildSentenceResults } from '@/lib/text-utils';
 import { assessSemanticFidelity } from '@/lib/semantic-fidelity';
 import { estimateRunCost } from '@/lib/observability';
+import {
+  createRequestId,
+  humanizeSchema,
+  logRequestError,
+  parseJsonBody,
+  validationError,
+} from '@/lib/validation';
 
 const MAX_BATCH_SIZE = 20;
 
@@ -65,6 +72,15 @@ async function llmSelfCheck(
 export const maxDuration = 120;
 
 export async function POST(request: NextRequest) {
+  const parsedRequest = await parseJsonBody(request, humanizeSchema);
+  if (!parsedRequest.ok) {
+    logRequestError(parsedRequest.requestId, parsedRequest.code, parsedRequest.message);
+    return NextResponse.json(
+      validationError(parsedRequest.code, parsedRequest.message, parsedRequest.requestId),
+      { status: parsedRequest.status },
+    );
+  }
+  const requestId = createRequestId();
   try {
     const startedAt = Date.now();
 
@@ -73,19 +89,13 @@ export async function POST(request: NextRequest) {
     const rateLimit = checkRateLimit(ip);
     if (!rateLimit.allowed) {
       return NextResponse.json(
-        { error: 'Rate limit exceeded. Please try again later.' },
+        validationError('rate_limited', 'Rate limit exceeded. Please try again later.', requestId),
         { status: 429 },
       );
     }
 
-    // Body size guard
-    const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
-    if (contentLength > 2_000_000) {
-      return NextResponse.json({ success: false, error: 'Request body too large.' }, { status: 413 });
-    }
-
     const {
-      text, style, model, apiKey,
+      text, style, model: requestedModel, apiKey,
       targetScore, language, writingSample,
             postprocess: enablePostprocess = true,
       chainModels: chainModelIds = [],
@@ -94,32 +104,36 @@ export async function POST(request: NextRequest) {
       freezeWords = '',
       synonymIntensity = 15,
       intensity: requestIntensity,
-    } = await request.json();
+    } = parsedRequest.data;
 
     // Resolve intensity: explicit request wins; else 'stealth' style defaults to
     // aggressive, everything else to light (preserves prior behaviour).
-    const intensity: Intensity = ['light', 'medium', 'aggressive', 'ninja'].includes(requestIntensity)
+    const intensity: Intensity = typeof requestIntensity === 'string' && ['light', 'medium', 'aggressive', 'ninja'].includes(requestIntensity)
       ? (requestIntensity as Intensity)
       : (style === 'stealth' ? 'aggressive' : 'light');
 
-    if (!text || !model) return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    const model = (requestedModel || process.env.STEALTHHUMANIZER_PROVIDER || 'gemini') as ModelProvider;
+    const resolvedStyle = (style || 'humanize') as StylePreset;
+    const resolvedApiKey = apiKey || '';
+    if (!text) return NextResponse.json(validationError('invalid_input', 'Missing required fields', requestId), { status: 400 });
     // "Rudra's Free Usage Model" and "Stealth Pro Academic" need no client apiKey —
     // they are pre-configured. Skip all the provider/cli/apiKey checks.
     const isRudraFree = model === 'rudra-free';
     const isProAcademic = model === 'pro-academic';
-    if (!isRudraFree && !isProAcademic && !apiKey) return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+    if (!isRudraFree && !isProAcademic && !apiKey) return NextResponse.json(validationError('invalid_input', 'Missing required fields', requestId), { status: 400 });
     // Reject CLI-only runners on the primary model AND anywhere in the chain —
     // chainModels flows through lib/chain into the CLI-capable runtime, so an
     // unguarded chain entry would otherwise spawn the server's local CLI.
     const cliOnlyRequested = [model, ...(Array.isArray(chainModelIds) ? chainModelIds : [])]
       .find((id) => isCliOnlyProvider(id as ModelProvider));
-    if (cliOnlyRequested) return NextResponse.json({ success: false, error: `Provider "${cliOnlyRequested}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.` }, { status: 400 });
+    if (cliOnlyRequested) return NextResponse.json(validationError('invalid_input', `Provider "${cliOnlyRequested}" is a local CLI runner and is not available over the web API. Use the stealthhumanizer CLI.`, requestId), { status: 400 });
     if (isRudraFree && !isRudraHumanizerConfigured()) {
-      return NextResponse.json({ success: false, error: "Rudra's Free Usage Model is not configured on this deployment. Set RUDRA_HUMANIZER_API_KEY or pick a different provider." }, { status: 503 });
+      logRequestError(requestId, 'internal', "Rudra's Free Usage Model is not configured on this deployment.");
+      return NextResponse.json(validationError('internal', "Rudra's Free Usage Model is not configured on this deployment. Set RUDRA_HUMANIZER_API_KEY or pick a different provider.", requestId), { status: 503 });
     }
-    if (countWords(text) > 10000) return NextResponse.json({ success: false, error: 'Exceeds 10,000 word limit' }, { status: 400 });
+    if (countWords(text) > 10000) return NextResponse.json(validationError('invalid_input', 'Exceeds 10,000 word limit', requestId), { status: 400 });
     if (Array.isArray(batchTexts) && batchTexts.length > MAX_BATCH_SIZE) {
-      return NextResponse.json({ success: false, error: `Batch size exceeds limit (${MAX_BATCH_SIZE}).` }, { status: 400 });
+      return NextResponse.json(validationError('invalid_input', `Batch size exceeds limit (${MAX_BATCH_SIZE}).`, requestId), { status: 400 });
     }
 
     const safety = enforceSafetyPolicy(text);
@@ -128,6 +142,8 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: 'Request blocked by safety policy.',
+          code: 'invalid_input',
+          requestId,
           reasons: safety.reasons,
           safeUseGuidance: safety.safeUseGuidance,
         },
@@ -149,12 +165,12 @@ export async function POST(request: NextRequest) {
     // predictable = harder to detect).
     const params = intensity === 'ninja'
       ? { temperature: 0.95, topP: 0.95 }
-      : (intensity === 'aggressive' || style === 'stealth')
+      : (intensity === 'aggressive' || resolvedStyle === 'stealth')
         ? { temperature: 0.92, topP: 0.95 }
         : { temperature: 0.88, topP: 0.95 };
     const systemPrompt = useCorpus
-      ? getCorpusAwareSystemPrompt(style, writingSample, undefined, language, freezeWords)
-      : getSystemPrompt(style, writingSample, language, freezeWords);
+      ? getCorpusAwareSystemPrompt(resolvedStyle, writingSample, undefined, language, freezeWords)
+      : getSystemPrompt(resolvedStyle, writingSample, language, freezeWords);
     const providerInfo = getProvider(model);
     const modelId = providerInfo?.defaultModel || model;
 
@@ -174,7 +190,7 @@ export async function POST(request: NextRequest) {
             rewritten = r.text;
           } else {
             for (let j = 0; j < chunks.length; j++) {
-              const out = await generateWithProvider(model, apiKey, systemPrompt, chunks[j], {
+              const out = await generateWithProvider(model, resolvedApiKey, systemPrompt, chunks[j], {
                 model: modelId,
                 temperature: params.temperature,
                 topP: params.topP,
@@ -185,7 +201,7 @@ export async function POST(request: NextRequest) {
           // Same bypass as the single-text path: rudra-free and pro-academic
           // outputs are already clean — the synonym/corpus layers damage them.
           const postprocessed = (!isRudraFree && !isProAcademic && enablePostprocess)
-            ? postprocess(rewritten, { light: true, style: style as any, synonymIntensity })
+            ? postprocess(rewritten, { light: true, style: resolvedStyle as any, synonymIntensity })
             : rewritten;
           const final = scrubAIText(postprocessed);
           const detection = detectAI(final);
@@ -239,7 +255,7 @@ export async function POST(request: NextRequest) {
     } else {
       for (let i = 0; i < chunks.length; i++) {
         const chunkPrompt = chunks[i] + langNote;
-        const result = await generateWithProvider(model, apiKey, systemPrompt, chunkPrompt, {
+        const result = await generateWithProvider(model, resolvedApiKey, systemPrompt, chunkPrompt, {
           model: modelId,
           temperature: params.temperature,
           topP: params.topP,
@@ -268,13 +284,13 @@ export async function POST(request: NextRequest) {
       // Also apply regular post-processing if toggled on (ALWAYS light mode to
       // prevent destructive transformations like reordering/randomization)
       if (enablePostprocess) {
-        currentText = postprocess(currentText, { light: true, style: style as any, synonymIntensity });
+        currentText = postprocess(currentText, { light: true, style: resolvedStyle as any, synonymIntensity });
       }
 
       // ==================== LAYER 3: Multi-Model Chain ====================
       if (chainModelIds && chainModelIds.length > 0) {
         // Build chain config from provided model IDs and API keys
-        const allApiKeys = { ...extraApiKeys, [model]: apiKey };
+        const allApiKeys = { ...extraApiKeys, [model]: apiKey || '' };
         const chainConfig = chainModelIds
           .filter((id: string) => allApiKeys[id])
           .map((id: string) => ({
@@ -286,7 +302,7 @@ export async function POST(request: NextRequest) {
           const chainResult = await chainModels({
             text: currentText,
             chainModels: chainConfig,
-            style: style as StylePreset,
+            style: resolvedStyle,
           });
           currentText = chainResult.text;
           passes += chainResult.passes.length;
@@ -325,7 +341,7 @@ export async function POST(request: NextRequest) {
 
           // Apply light post-processing after each self-check fix
           if (enablePostprocess) {
-            currentText = postprocess(currentText, { light: true, style: style as any });
+            currentText = postprocess(currentText, { light: true, style: resolvedStyle as any });
           }
         } catch { break; }
       }
@@ -364,7 +380,7 @@ export async function POST(request: NextRequest) {
       });
       finalText = guard.text;
       // Intensity-driven anti-detector pass (after the guard so it is never reverted).
-      finalText = intensityPostprocess(finalText, intensity, { style: style as any });
+      finalText = intensityPostprocess(finalText, intensity, { style: resolvedStyle as any });
 
       // Ninja: surgically rewrite ONLY the lowest-scoring sentences using the
       // OFFLINE local rehumanizer (no extra LLM pass -> no added fingerprints).
@@ -376,11 +392,11 @@ export async function POST(request: NextRequest) {
           .slice(0, 3)
           .filter((s) => s.score < 55 && s.text && s.text.trim().length > 20);
         const replacements = worst
-          .map((s) => ({ original: s.text, replacement: localRehumanizeSentence(s.text, 0, { style }) }))
+          .map((s) => ({ original: s.text, replacement: localRehumanizeSentence(s.text, 0, { style: resolvedStyle }) }))
           .filter((r) => r.replacement && r.replacement.trim() !== r.original.trim());
         if (replacements.length > 0) {
           finalText = replaceSentencesInText(finalText, replacements);
-          finalText = intensityPostprocess(finalText, 'aggressive', { style: style as any });
+          finalText = intensityPostprocess(finalText, 'aggressive', { style: resolvedStyle as any });
         }
       }
       finalText = scrubAIText(finalText);
@@ -393,7 +409,7 @@ export async function POST(request: NextRequest) {
     // pass. It changes the text through grammar-gated transforms only —
     // never through the synonym-swap cascade that previously mangled prose.
     if (finalText.trim().toLowerCase() === text.trim().toLowerCase()) {
-      finalText = applyHumanizeTransforms(finalText, { style });
+      finalText = applyHumanizeTransforms(finalText, { style: resolvedStyle });
     }
     const finalDetection = detectAI(finalText);
     const confidenceReport = buildConfidenceReport(finalDetection.score);
@@ -411,7 +427,7 @@ export async function POST(request: NextRequest) {
       sentences, fullText: finalText, model, modelName: providerInfo?.name || model,
       wordCount: { input: countWords(text), output: countWords(finalText) },
       timestamp: Date.now(), passes, finalScore: finalDetection.score,
-      options: { style, language },
+      options: { style: resolvedStyle, language },
       confidenceReport,
       runtimeModelScore,
       semanticFidelity,
@@ -450,6 +466,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, ...responsePayload });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error';
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    logRequestError(requestId, 'internal', message);
+    return NextResponse.json(validationError('internal', process.env.NODE_ENV === 'development' ? message : 'Internal error', requestId), { status: 500 });
   }
 }

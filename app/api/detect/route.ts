@@ -3,37 +3,29 @@ import { detectWithGPTZero } from '@/lib/gptzero';
 import { detectWithRudra, isRudraDetectorConfigured } from '@/lib/server/rudra-free';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { detectAI } from '@/lib/detector';
+import { detectSchema, logRequestError, parseJsonBody, validationError } from '@/lib/validation';
 
 // RoBERTa detection is fast (~70ms typical) but allow margin for cold starts.
 export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
+  const parsedRequest = await parseJsonBody(request, detectSchema);
+  if (!parsedRequest.ok) {
+    logRequestError(parsedRequest.requestId, parsedRequest.code, parsedRequest.message);
+    return NextResponse.json(validationError(parsedRequest.code, parsedRequest.message, parsedRequest.requestId), { status: parsedRequest.status });
+  }
+  const requestId = parsedRequest.requestId;
   try {
     // Rate limiting
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
     const rateLimit = checkRateLimit(ip);
     if (!rateLimit.allowed) {
       return NextResponse.json(
-        { success: false, error: 'Rate limit exceeded. Please try again later.' },
+        validationError('rate_limited', 'Rate limit exceeded. Please try again later.', requestId),
         { status: 429 },
       );
     }
-
-    // Body size guard
-    const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
-    if (contentLength > 2_000_000) {
-      return NextResponse.json({ success: false, error: 'Request body too large.' }, { status: 413 });
-    }
-
-    const { text } = await request.json();
-
-    if (!text || typeof text !== 'string' || text.trim().length === 0) {
-      return NextResponse.json({ success: false, error: 'text is required' }, { status: 400 });
-    }
-
-    if (text.length > 50000) {
-      return NextResponse.json({ success: false, error: 'Text exceeds 50,000 character limit' }, { status: 400 });
-    }
+    const { text } = parsedRequest.data;
 
     // Prefer the maintainer's hosted detector (free, no key needed from the
     // user). Open RoBERTa detectors saturate ~0.99 on ANY polished text —
@@ -79,6 +71,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, data: result });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal error';
-    return NextResponse.json({ success: false, error: process.env.NODE_ENV === 'development' ? message : 'Internal error' }, { status: 500 });
+    logRequestError(requestId, 'internal', message);
+    return NextResponse.json(validationError('internal', process.env.NODE_ENV === 'development' ? message : 'Internal error', requestId), { status: 500 });
   }
 }
