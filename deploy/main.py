@@ -573,7 +573,12 @@ def _hpool_pick(inp, hpool, used, k=8):
                         out = re.sub(r'(?<!^)\b' + re.escape(a) + r'\b', b, out, count=1)
         for pat, rep in HPOOL_SCRUB:
             out = re.sub(pat, rep, out)
+        out = re.sub(r"^(?:Abstract|ABSTRACT|Summary|SUMMARY|Background|BACKGROUND|Introduction|INTRODUCTION)[:\.\s—–-]+", "", out)
+        out = re.sub(r"\s*\([eE]\.g\.?$", "", out)
+        out = re.sub(r"\s*\([iI]\.e\.?$", "", out)
         out = re.sub(r"\s{2,}", " ", out).strip()
+        if out.count("(") > out.count(")"):
+            out = out.rstrip(".!?") + ")."
         out = out[:1].upper() + out[1:] if out else out
         if out and out[-1] not in ".!?":
             out += "."
