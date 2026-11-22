@@ -440,11 +440,40 @@ def _prune_jobs():
 NUM_RE = re.compile(r"\d[\d,\.%]*")
 ENT_RE = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b")
 ENT_STOP = {
-    "the", "this", "that", "these", "those", "there", "research", "researchers",
-    "however", "today", "some", "such", "its", "their", "our", "my", "no", "not",
+    # Prepositions & Connectors
+    "in", "on", "at", "by", "for", "with", "from", "into", "through", "during",
+    "over", "under", "across", "between", "among", "despite", "towards", "against",
+    "without", "within", "around", "about", "above", "below", "upon", "behind",
+    "before", "after", "since", "until", "till", "along", "throughout", "via",
+    # Conjunctions & Pronouns & Sentence starters
+    "the", "this", "that", "these", "those", "there", "here", "it", "they", "we",
+    "you", "he", "she", "i", "its", "their", "our", "my", "your", "his", "her",
     "if", "when", "while", "as", "an", "a", "but", "and", "or", "so", "then",
-    "also", "plus", "overall", "currently", "now", "one", "two", "it", "they",
+    "also", "plus", "overall", "currently", "now", "one", "two", "three",
+    "however", "moreover", "furthermore", "nonetheless", "nevertheless",
+    "consequently", "therefore", "thus", "hence", "accordingly", "indeed",
+    "meanwhile", "similarly", "particularly", "specifically", "especially",
+    "notably", "surprisingly", "interestingly", "importantly", "arguably",
+    # Common generic verbs / adjectives that start sentences
+    "modern", "direct", "traditional", "conventional", "current", "recent",
+    "previous", "early", "late", "new", "old", "first", "second", "third",
+    "last", "next", "high", "low", "great", "small", "large", "main", "major",
+    "minor", "key", "central", "primary", "initial", "final", "total",
+    "research", "researchers", "study", "studies", "results", "analysis",
+    "data", "evidence", "findings", "method", "methods", "approach", "model",
+    "models", "system", "systems", "network", "networks", "order", "past",
+    "future", "today", "some", "such", "all", "each", "every", "both", "either",
+    "neither", "several", "few", "many", "much", "more", "most", "other", "another",
+    "using", "given", "based", "according", "compared", "providing", "showing",
+    "having", "taking", "making", "doing", "being", "including", "regarding",
+    "autonomous", "convolutional", "quantitative", "distributed", "intelligent",
+    "agile", "deep", "level", "neural", "quantum", "digital", "clinical",
 }
+
+def _extract_real_entities(text: str):
+    """Extract interior named entities, stripping sentence-initial capitalized words."""
+    t_body = re.sub(r"(?:^|[.!?]\s+)[A-Z][a-z]*\b", " ", text)
+    return [e for e in ENT_RE.findall(t_body) if e.lower() not in ENT_STOP and len(e) >= 4]
 
 HPOOL_SCRUB = [
     (r"\b(?:It|it)(?:'s)?\s+(?:also\s+)?important to (?:note|highlight|recognize)\s+(?:that|how|why|whether)\b", ""),
@@ -500,7 +529,7 @@ def _nomic_embed(texts):
 
 
 def _hpool_pick(inp, hpool, used, k=8):
-    """Best human-corpus sentence for inp with mechanical slot substitution."""
+    """Best human-corpus sentence for inp with surgical non-destructive entity alignment."""
     np_ = hpool["np"]
     embs = _nomic_embed([inp])
     if not embs:
@@ -511,21 +540,23 @@ def _hpool_pick(inp, hpool, used, k=8):
     sims = hpool["unit"] @ q
     order = np_.argsort(-sims)[:96]
     in_nums = NUM_RE.findall(inp)
-    in_ents = [e for e in ENT_RE.findall(inp) if e.lower() not in ENT_STOP]
+    in_ents = _extract_real_entities(inp)
 
     scored = []
     for i in order:
         s = hpool["texts"][int(i)]
         reuse = s in used
         c_nums = NUM_RE.findall(s)
-        c_ents = [e for e in ENT_RE.findall(s) if e.lower() not in ENT_STOP]
+        c_ents = _extract_real_entities(s)
         score = float(sims[int(i)])
         if in_nums:
             score += 0.10 if c_nums else -0.05
         else:
             score -= 0.08 if c_nums else 0.0
-        if in_ents:
-            score += 0.06 if c_ents else -0.03
+        if in_ents and c_ents:
+            score += 0.06
+        if reuse:
+            score -= 0.60  # Penalize duplicate sentences
         scored.append((score, s, c_nums, c_ents, reuse))
     scored.sort(key=lambda t: -t[0])
 
@@ -534,11 +565,12 @@ def _hpool_pick(inp, hpool, used, k=8):
         if not reuse:
             if in_nums and c_nums:
                 for a, b in zip(c_nums, in_nums):
-                    out = out.replace(a, b, 1)
-            elif in_nums and not c_nums:
-                out = out.rstrip(".!?") + ", reaching " + in_nums[0] + " in recent measurements."
-            for a, b in zip(c_ents, in_ents):
-                out = out.replace(a, b)
+                    out = re.sub(r'\b' + re.escape(a) + r'\b', b, out, count=1)
+            # Only substitute genuine interior entities with word boundaries, NEVER sentence starters
+            if in_ents and c_ents:
+                for a, b in zip(c_ents, in_ents):
+                    if a.lower() != b.lower() and len(a) >= 4 and len(b) >= 4:
+                        out = re.sub(r'(?<!^)\b' + re.escape(a) + r'\b', b, out, count=1)
         for pat, rep in HPOOL_SCRUB:
             out = re.sub(pat, rep, out)
         out = re.sub(r"\s{2,}", " ", out).strip()
@@ -552,7 +584,7 @@ def _hpool_pick(inp, hpool, used, k=8):
 
 
 def _hpool_humanize(text):
-    """Human Corpus Engine: 100% human-substrate output, no LLM tokens."""
+    """Human Corpus Engine: 100% human-substrate output, preserving paragraphs and authentic grammar."""
     t0 = time.perf_counter()
     hpool = state.get("hpool")
     if not hpool:
@@ -565,26 +597,35 @@ def _hpool_humanize(text):
             "engine": "human-corpus",
             "engine_fallback": "pool-unavailable",
         }
-    sents = [s for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
+    if not paragraphs:
+        paragraphs = [text.strip()]
     used = set()
-    outs = []
-    for s in sents[:60]:
-        pick = _hpool_pick(s, hpool, used)
-        if not pick:
-            pick = _hpool_pick(s, hpool, set())
-        if not pick:
-            pick = s
-        used.add(pick)
-        outs.append(pick)
-    out = " ".join(outs)
-    out = re.sub(r"\s{2,}", " ", out).strip()
+    out_paras = []
+    total_candidates = 0
+    for para in paragraphs:
+        sents = [s for s in re.split(r"(?<=[.!?])\s+", para) if s.strip()]
+        para_outs = []
+        for s in sents[:60]:
+            pick = _hpool_pick(s, hpool, used)
+            if not pick:
+                pick = _hpool_pick(s, hpool, set())
+            if not pick:
+                pick = s
+            used.add(pick)
+            para_outs.append(pick)
+            total_candidates += 1
+        if para_outs:
+            out_paras.append(" ".join(para_outs))
+    out = "\n\n".join(out_paras)
+    out = re.sub(r"[ \t]{2,}", " ", out).strip()
     out_ai_prob = _ensemble_ai_prob(out) if out else 1.0
     return {
         "humanized": out,
         "model": "human-corpus:v1",
         "elapsed_ms": int((time.perf_counter() - t0) * 1000),
         "ai_probability": float(out_ai_prob),
-        "candidates": len(outs),
+        "candidates": total_candidates,
         "engine": "human-corpus",
     }
 
