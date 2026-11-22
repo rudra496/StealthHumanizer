@@ -329,7 +329,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
               text: inputText,
               temperature: 0.85,
               style: freeEngine || style || 'professional',
-              engine: '',
+              engine: freeEngine === 'stealth' ? 'human-corpus' : (freeEngine || ''),
             }),
           });
           startData = await startResp.json().catch(() => ({}));

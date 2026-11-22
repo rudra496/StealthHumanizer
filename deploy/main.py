@@ -258,8 +258,9 @@ def _ensemble_ai_prob(txt: str) -> float:
 
 
 async def _run_humanize(text: str, temperature: float, samples: int, engine: str = "", style: str = "professional") -> dict:
-    # Explicit legacy opt-in for human corpus
-    if engine == "human-corpus" and state.get("hpool"):
+    resolved_style = (style or engine or "professional").lower()
+    # Route to human corpus when stealth style or human-corpus engine is requested and corpus is loaded
+    if (engine == "human-corpus" or resolved_style in ("stealth", "human-corpus")) and state.get("hpool"):
         return _hpool_humanize(text)
     """Best-of-N gemma sampling + cleanup + meaning gate + ensemble ranking."""
     t0 = time.perf_counter()
