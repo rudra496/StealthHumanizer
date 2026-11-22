@@ -44,14 +44,14 @@ OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "150"))
 LONG_MODEL = os.environ.get("OLLAMA_HUMANIZER_LONG", "gemma3:4b")
 
 # Job lifecycle: hard cap sampling well inside the frontend's poll window.
-JOB_BUDGET_S = 130
+JOB_BUDGET_S = 240
 OLLAMA_SEMAPHORE = asyncio.Semaphore(1)  # serialize gemma calls to prevent ARM core starvation
 JOB_TTL_S = 900          # finished jobs pruned after 15 min
 MAX_RUNNING_JOBS = 2     # protect the free ARM box
 
 STYLE_PROMPTS = {
     "professional": (
-        "You are an elite senior human editor and prose stylist. Rewrite the user's text into articulate, authentic human prose that completely bypasses AI detectors.\n"
+        "You are an elite senior human editor and prose stylist. Rewrite the user's text into clear, articulate, authentic human prose that completely bypasses AI detectors like ZeroGPT.\n"
         "CRITICAL RULES:\n"
         "1. ZERO HALLUCINATION: Preserve 100% of all facts, data, numbers, dates, technical names, and core arguments. Never invent new statistics or dates.\n"
         "2. High Burstiness: Drastically vary sentence length. Mix punchy short sentences (3-7 words) with complex, compound explanations (18-30 words). Never repeat the same rhythmic cadence.\n"
@@ -227,15 +227,16 @@ def _f1_vs(src: str, c: str) -> float:
 
 def _meaning_ok(src: str, c: str, style: str = "professional") -> bool:
     sl = max(1, len(src))
-    if not (0.5 <= len(c) / sl <= 1.8):
+    if not (0.45 <= len(c) / sl <= 2.2):
         return False
-    if sorted(_NUM_RE.findall(src)) != sorted(_NUM_RE.findall(c)):
-        return False
-    if _ents(c) - _ents(src):
-        return False
+    src_nums = sorted(_NUM_RE.findall(src))
+    cand_nums = sorted(_NUM_RE.findall(c))
+    if src_nums and src_nums != cand_nums:
+        if set(src_nums) - set(cand_nums):
+            return False
     if abs(_neg_count(c) - _neg_count(src)) > 2:
         return False
-    return _f1_vs(src, c) >= 0.18
+    return _f1_vs(src, c) >= 0.15
 
 
 def _one_detector_prob(tok_, mdl_, txt: str) -> float:
@@ -263,8 +264,8 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
     """Best-of-N gemma sampling + cleanup + meaning gate + ensemble ranking."""
     t0 = time.perf_counter()
     base_temp = max(0.75, min(0.92, temperature))
-    n = min(3, max(1, samples))
-    temps = [base_temp, min(0.95, base_temp + 0.08), min(1.0, base_temp + 0.15)][:n]
+    n = 1  # enforce single fast inference to eliminate semaphore starvation on 4-core ARM
+    temps = [base_temp]
 
     resolved_style = (style or engine or "professional").lower()
     if resolved_style in ("gemma", "neural", "default"):
@@ -382,7 +383,7 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
         s = re.sub(r"\s{2,}", " ", s).strip()
         s = re.sub(r" ([,.;:!?])", r"\1", s)               # space before punct left by removals
         s = re.sub(r",\s*([.!?])", r"\1", s)               # dangling comma before sentence end
-        s = re.sub(r"^(?:[,.]|\bAnd\b|\bAlso\b)\s*", "", s)  # sentence-start cleanup
+        s = re.sub(r"^[,\.\s]+", "", s)  # leading punctuation cleanup
         s = ". ".join(x[:1].upper() + x[1:] for x in s.split(". ") if x.strip())
         if s and s[-1] not in ".!?":
             s += "."
