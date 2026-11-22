@@ -57,6 +57,7 @@ export const humanizeJobSchema = z.object({
   temperature: optionalTemperature,
   samples: optionalSamples,
   engine: z.string().max(32).optional(),
+  style: z.string().max(32).optional(),
 }).strict();
 
 export const grammarSchema = z.object({

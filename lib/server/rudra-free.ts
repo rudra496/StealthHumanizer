@@ -118,11 +118,14 @@ export interface RudraHumanizeResult {
   elapsedMs: number;
 }
 
-export async function humanizeWithRudra(text: string, engine?: string): Promise<RudraHumanizeResult> {
+export async function humanizeWithRudra(text: string, engine?: string, style?: string): Promise<RudraHumanizeResult> {
   const key = getHumanizerKey();
   if (!key) {
     throw new Error('Rudra Free model is not configured on the server (RUDRA_HUMANIZER_API_KEY missing).');
   }
+
+  const resolvedEngine = engine && engine !== 'human-corpus' ? engine : '';
+  const resolvedStyle = style || (engine && engine !== 'human-corpus' ? engine : 'professional');
 
   const response = await rudraFetch('/api/humanize/', {
     method: 'POST',
@@ -132,9 +135,10 @@ export async function humanizeWithRudra(text: string, engine?: string): Promise<
     },
     body: JSON.stringify({
       text,
-      temperature: 0.7,
-      num_beams: 4,
-      engine: engine || 'human-corpus',
+      temperature: 0.85,
+      samples: 2,
+      engine: resolvedEngine,
+      style: resolvedStyle,
     }),
   }, HUMANIZE_TIMEOUT_MS);
 

@@ -113,7 +113,8 @@ export async function POST(request: NextRequest) {
       ? (requestIntensity as Intensity)
       : (style === 'stealth' ? 'aggressive' : 'light');
 
-    const model = (requestedModel || process.env.STEALTHHUMANIZER_PROVIDER || 'gemini') as ModelProvider;
+    const defaultModel = (!requestedModel && !apiKey) ? 'rudra-free' : (process.env.STEALTHHUMANIZER_PROVIDER || 'rudra-free');
+    const model = (requestedModel || defaultModel) as ModelProvider;
     const resolvedStyle = (style || 'humanize') as StylePreset;
     const resolvedApiKey = apiKey || '';
     if (!text) return NextResponse.json(validationError('invalid_input', 'Missing required fields', requestId), { status: 400 });
@@ -184,7 +185,7 @@ export async function POST(request: NextRequest) {
           const chunks = chunkText(batchInput, 2500);
           let rewritten = '';
           if (isRudraFree) {
-            const r = await humanizeWithRudra(batchInput, engine || 'human-corpus');
+            const r = await humanizeWithRudra(batchInput, engine, resolvedStyle);
             rewritten = r.text;
           } else if (isProAcademic) {
             const r = await runAcademicInversion(batchInput);
@@ -247,7 +248,7 @@ export async function POST(request: NextRequest) {
     if (isRudraFree) {
       // Rudra's hosted model takes the whole text in one shot — no chunking,
       // no system prompt. The model is purpose-built for humanization.
-      const rudraResult = await humanizeWithRudra(text, engine || 'human-corpus');
+      const rudraResult = await humanizeWithRudra(text, engine, resolvedStyle);
       humanizedText = rudraResult.text;
     } else if (isProAcademic) {
       // Pro Academic runs zero-load multi-hop syntactic inversion with citation/math protection.

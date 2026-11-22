@@ -142,16 +142,16 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     setPreferredModel(m);
     storePreferredModel(m);
   };
-  const [freeEngine, setFreeEngine] = useState<'human-corpus' | 'gemma'>('human-corpus');
+  const [freeEngine, setFreeEngine] = useState<'professional' | 'academic' | 'casual' | 'stealth'>('professional');
   useEffect(() => {
     try {
       const savedEngine = localStorage.getItem('stealth_free_engine');
-      if (savedEngine === 'human-corpus' || savedEngine === 'gemma') {
+      if (savedEngine === 'professional' || savedEngine === 'academic' || savedEngine === 'casual' || savedEngine === 'stealth') {
         setFreeEngine(savedEngine);
       }
     } catch { /* ignore */ }
   }, []);
-  const updateFreeEngine = (engine: 'human-corpus' | 'gemma') => {
+  const updateFreeEngine = (engine: 'professional' | 'academic' | 'casual' | 'stealth') => {
     setFreeEngine(engine);
     try {
       localStorage.setItem('stealth_free_engine', engine);
@@ -316,11 +316,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     // cross-origin host in the browser).
     if (providerId === 'rudra-free') {
       try {
-        setPipelineStep(
-          freeEngine === 'human-corpus'
-            ? 'Starting Human Corpus engine (sub-second retrieval + transplant)…'
-            : 'Starting humanization job…'
-        );
+        setPipelineStep('Starting neural humanization job…');
         // The free VPS runs at most 2 jobs at a time; under load the start
         // call returns "server busy". Running jobs finish in ~60–90s, so a
         // short retry loop usually lands a slot instead of failing instantly.
@@ -332,7 +328,8 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
             body: JSON.stringify({
               text: inputText,
               temperature: 0.85,
-              engine: freeEngine,
+              style: freeEngine || style || 'professional',
+              engine: '',
             }),
           });
           startData = await startResp.json().catch(() => ({}));
@@ -353,14 +350,10 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
 
         let rd: any = null;
         const deadline = Date.now() + 260_000;
-        const pollInterval = freeEngine === 'human-corpus' ? 600 : 4000;
+        const pollInterval = 3000;
         while (Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, pollInterval));
-          setPipelineStep(
-            freeEngine === 'human-corpus'
-              ? 'Assembling human-substrate text…'
-              : 'Humanizing (sampling rewrites)…'
-          );
+          setPipelineStep('Humanizing with neural rewrite…');
           // Job ids are server-generated; guard + encode before they land in
           // a URL (the shuttle route re-validates the id server-side too).
           if (!/^[\w-]{6,64}$/.test(jobId)) throw new Error('Invalid job id');
@@ -394,7 +387,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           sentences: sents,
           fullText,
           model: 'rudra-free',
-          modelName: rd.engine === 'human-corpus' ? "Rudra's Human Corpus Engine (0% AI)" : "Rudra's Free Usage Model",
+          modelName: "Rudra's Free Usage Model (Neural)",
           wordCount: { input: countWords(inputText), output: countWords(fullText) },
           timestamp: Date.now(),
           passes: 1,
@@ -978,36 +971,60 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-dark-200 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                  Free Humanization Mode
+                  Free Humanization Style
                 </span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/20">
-                  {freeEngine === 'human-corpus' ? '⚡ 0.8s · 0% AI Score' : '🧠 Neural LLM · ~60s'}
+                  ⚡ Oracle VPS · Neural Engine
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button
                   type="button"
-                  onClick={() => updateFreeEngine('human-corpus')}
+                  onClick={() => updateFreeEngine('professional')}
                   className={`px-3 py-2 rounded-lg text-xs font-medium text-left transition-all ${
-                    freeEngine === 'human-corpus'
+                    freeEngine === 'professional'
                       ? 'bg-emerald-600/90 text-white shadow-md shadow-emerald-900/30 border border-emerald-400/30'
                       : 'bg-dark-700/60 text-dark-300 hover:text-white hover:bg-dark-700 border border-transparent'
                   }`}
                 >
-                  <div className="font-semibold flex items-center gap-1">⚡ Human Corpus</div>
-                  <div className="text-[10px] opacity-80 mt-0.5">Zero-LLM · Passes ZeroGPT 0% AI</div>
+                  <div className="font-semibold flex items-center gap-1">💼 Professional</div>
+                  <div className="text-[10px] opacity-80 mt-0.5">Executive & clear</div>
                 </button>
                 <button
                   type="button"
-                  onClick={() => updateFreeEngine('gemma')}
+                  onClick={() => updateFreeEngine('academic')}
                   className={`px-3 py-2 rounded-lg text-xs font-medium text-left transition-all ${
-                    freeEngine === 'gemma'
+                    freeEngine === 'academic'
                       ? 'bg-accent-600/90 text-white shadow-md shadow-accent-900/30 border border-accent-400/30'
                       : 'bg-dark-700/60 text-dark-300 hover:text-white hover:bg-dark-700 border border-transparent'
                   }`}
                 >
-                  <div className="font-semibold flex items-center gap-1">🧠 Gemma 3:4B</div>
-                  <div className="text-[10px] opacity-80 mt-0.5">Deep generative rewrite (slower)</div>
+                  <div className="font-semibold flex items-center gap-1">🎓 Academic</div>
+                  <div className="text-[10px] opacity-80 mt-0.5">Scholarly research</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateFreeEngine('casual')}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium text-left transition-all ${
+                    freeEngine === 'casual'
+                      ? 'bg-indigo-600/90 text-white shadow-md shadow-indigo-900/30 border border-indigo-400/30'
+                      : 'bg-dark-700/60 text-dark-300 hover:text-white hover:bg-dark-700 border border-transparent'
+                  }`}
+                >
+                  <div className="font-semibold flex items-center gap-1">☕ Casual</div>
+                  <div className="text-[10px] opacity-80 mt-0.5">Conversational</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateFreeEngine('stealth')}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium text-left transition-all ${
+                    freeEngine === 'stealth'
+                      ? 'bg-purple-600/90 text-white shadow-md shadow-purple-900/30 border border-purple-400/30'
+                      : 'bg-dark-700/60 text-dark-300 hover:text-white hover:bg-dark-700 border border-transparent'
+                  }`}
+                >
+                  <div className="font-semibold flex items-center gap-1">🥷 Stealth</div>
+                  <div className="text-[10px] opacity-80 mt-0.5">Max burstiness</div>
                 </button>
               </div>
             </div>

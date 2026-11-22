@@ -49,28 +49,50 @@ OLLAMA_SEMAPHORE = asyncio.Semaphore(3)  # cap concurrent gemma calls box-wide
 JOB_TTL_S = 900          # finished jobs pruned after 15 min
 MAX_RUNNING_JOBS = 2     # protect the free ARM box
 
-HUMANIZE_SYSTEM_PROMPT = (
-    "You are a professional text humanizer. Rewrite the user's text so it reads like a competent "
-    "human professional wrote it. "
-    "RULES:\n"
-    "1. Preserve ALL meaning, facts, names, numbers, code, URLs, and citations.\n"
-    "2. Keep the approximate length — do NOT summarize or shorten.\n"
-    "3. Vary sentence length and structure: mix short direct sentences (5-9 words) with longer "
-    "ones; never keep every sentence the same rhythm.\n"
-    "4. Plain professional voice. No chatty padding (really, absolutely, pretty, lots of, anyway, "
-    "you know) and no corporate buzzwords. Every sentence must carry real information.\n"
-    "5. Replace AI clichés: furthermore, moreover, additionally, delve, tapestry, navigate, complexities, "
-    "in the realm of, it is important to note, a testament to, underscores, vibrant, multifaceted, "
-    "unprecedented, crucial, pivotal, fostering, leveraging, plays a crucial role, digital landscape, "
-    "cutting-edge, revolutionary, streamlined, seamless, robust, game-changer, ever-evolving, "
-    "in today's fast-paced world.\n"
-    "6. Use ordinary connectives where they fit (but, so, and, then).\n"
-    "7. Do NOT add personal pronouns or fillers that are not in the original: I, me, my, we, us, our, "
-    "you, your, you'll, 'you know', folks. Write about "
-    "the subject, not the reader or writer.\n"
-    "8. A few contractions are natural; do not contract every verb.\n"
-    "9. Output ONLY the rewritten text. No preamble. No explanation. No quotes around the output."
-)
+STYLE_PROMPTS = {
+    "professional": (
+        "You are an elite professional text humanizer and copy editor. Rewrite the user's text so it reads like an "
+        "articulate, senior human professional wrote it.\n"
+        "RULES:\n"
+        "1. Preserve 100% of all meaning, facts, numbers, dates, technical terms, URLs, and citations with zero hallucination.\n"
+        "2. Keep the approximate length — do NOT summarize, shorten, or expand.\n"
+        "3. High Burstiness: Strongly vary sentence length. Mix punchy short sentences (4-8 words) with longer compound sentences (18-28 words). Never repeat the same rhythmic cadence.\n"
+        "4. Eliminate all robotic AI markers: never use furthermore, moreover, additionally, consequently, in conclusion, it is important to note, delve, tapestry, multifaceted, pivotal, foster, leverage, vibrant, landscape, testament.\n"
+        "5. Natural transitions: connect ideas organically with natural phrases (In practice, At the same time, That said, To that end, Meanwhile, In fact) or direct thematic openers.\n"
+        "6. Active and concrete voice: eliminate abstract passive nominalizations. Replace 'the implementation of X facilitates Y' with direct active human prose.\n"
+        "7. Output ONLY the rewritten text. No preamble, no quotes, no markdown explanations."
+    ),
+    "academic": (
+        "You are an expert academic peer reviewer and scholarly editor. Rewrite the text to read like a high-impact journal publication written by a human scholar.\n"
+        "RULES:\n"
+        "1. Preserve all citations, equations, numbers, datasets, domain terminology, and logical arguments with 100% fidelity.\n"
+        "2. Vary syntactic structures and avoid repetitive sentence templates.\n"
+        "3. Eliminate formulaic AI transitions: do NOT use furthermore, moreover, additionally, in conclusion, it is crucial to note that, underscores, multifaceted.\n"
+        "4. Use genuine scholarly discourse markers: In particular, Notably, Conversely, Empirical evidence indicates, To examine this dynamic.\n"
+        "5. Maintain a formal, authoritative academic register without contractions.\n"
+        "6. Output ONLY the rewritten text. No preamble, no quotes."
+    ),
+    "casual": (
+        "You are a friendly, articulate human writer. Rewrite the text into a natural, conversational human tone.\n"
+        "RULES:\n"
+        "1. Keep all facts, names, and information completely intact.\n"
+        "2. Use natural contractions (don't, it's, they're, we've) and direct everyday phrasing.\n"
+        "3. Mix very short punchy statements with descriptive explanations for high burstiness.\n"
+        "4. Remove all corporate buzzwords, robotic jargon, and stiff transitions.\n"
+        "5. Output ONLY the rewritten text. No preamble, no quotes."
+    ),
+    "stealth": (
+        "You are a master humanizer specializing in evading statistical and perplexity detection. Rewrite the text so it has the natural entropy, lexical diversity, and varied burstiness of human writing.\n"
+        "RULES:\n"
+        "1. Preserve all core facts, numbers, specific terms, and intent without altering meaning.\n"
+        "2. Maximum Burstiness: Drastically fluctuate sentence length (e.g. 5 words, then 24 words, then 10 words, then 28 words).\n"
+        "3. Invert predictable clause order (e.g. front prepositional phrases or participial contexts).\n"
+        "4. Absolutely zero stock AI transitions (no furthermore, moreover, additionally, consequently, in conclusion, it is important to note, delve, tapestry).\n"
+        "5. Output ONLY the rewritten text. No preamble, no quotes."
+    ),
+}
+
+HUMANIZE_SYSTEM_PROMPT = STYLE_PROMPTS["professional"]
 
 GRAMMAR_SYSTEM_PROMPT = (
     "You are a grammar and spelling checker. Fix ONLY grammar, spelling, and punctuation errors "
@@ -216,8 +238,8 @@ def _ensemble_ai_prob(txt: str) -> float:
     return p
 
 
-async def _run_humanize(text: str, temperature: float, samples: int, engine: str = "") -> dict:
-    # Human Corpus Engine: zero-LLM path (retrieval + mechanical transplant).
+async def _run_humanize(text: str, temperature: float, samples: int, engine: str = "", style: str = "professional") -> dict:
+    # Explicit legacy opt-in for human corpus
     if engine == "human-corpus" and state.get("hpool"):
         return _hpool_humanize(text)
     """Best-of-N gemma sampling + cleanup + meaning gate + ensemble ranking."""
@@ -227,7 +249,12 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
     temps = [base_temp, min(1.15, base_temp + 0.25),
              min(1.25, base_temp + 0.4), min(1.3, base_temp + 0.5)][:n]
 
-    tasks = [asyncio.ensure_future(_one_gemma_sample(text, t)) for t in temps]
+    resolved_style = (style or engine or "professional").lower()
+    if resolved_style in ("gemma", "neural", "default"):
+        resolved_style = "professional"
+    system_prompt = STYLE_PROMPTS.get(resolved_style, STYLE_PROMPTS["professional"])
+
+    tasks = [asyncio.ensure_future(_one_gemma_sample(text, t, system=system_prompt)) for t in temps]
 
     # v6 BART candidate (self-trained on pronoun-free casual technical pairs):
     # generated POST-gemma, only while job budget remains. Concurrent BART+gemma
@@ -399,20 +426,11 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
         p = re.sub(r"\b(\w+)\s+(?:we're|we are)\s+(\w+ing)\b(?!\s+to\b)", r"\1 \2", p, flags=I_)
         p = re.sub(r"\bwe're\s+going\s+to\b", r"the goal is to", p, flags=I_)
         p = re.sub(r"\bwe\s+need\s+to\b", r"there is a need to", p, flags=I_)
-        p = re.sub(r"\bwe\s+must\b", r"governments and citizens must", p, flags=I_)
         p = re.sub(r"\bwe\s+can\b", r"it is possible to", p, flags=I_)
-        p = re.sub(r"\bwe\s+see\b", r"observers see", p, flags=I_)
-        p = re.sub(r"\bwe\s+all\b", r"everyone", p, flags=I_)
-        p = re.sub(r"\bwe\b", r"people", p, flags=I_)                                   # last resort
         p = re.sub(r"\byou're\s+(\w+ing)\b", r"that is \1", p, flags=I_)
         p = re.sub(r"\byou\s+(?:can|could)\b", r"it is possible to", p, flags=I_)
         p = re.sub(r"\byou\s+(?:know|see)\b", r"clearly", p, flags=I_)
-        p = re.sub(r"\byou\b", r"readers", p, flags=I_)                                 # last resort
-        p = re.sub(r"\bour\b", r"the", p, flags=I_)
-        p = re.sub(r"\bmy\b", r"the", p, flags=I_)
-        p = re.sub(r"\bus\b", r"people", p, flags=I_)
         p = re.sub(r"\bI\s+think\b", r"arguably", p, flags=I_)
-        p = re.sub(r"\bI\b", r"the writer", p, flags=I_)
         p = re.sub(r"\s{2,}", " ", p).strip()
         # Word-level substitutions barely move meaning — gate only on sane
         # length (the earlier F1>=0.22 gate rejected legitimately-casual
@@ -508,9 +526,9 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
     }
 
 
-async def _run_job(job_id: str, text: str, temperature: float, samples: int, engine: str = ""):
+async def _run_job(job_id: str, text: str, temperature: float, samples: int, engine: str = "", style: str = "professional"):
     try:
-        jobs[job_id]["result"] = await _run_humanize(text, temperature, samples, engine)
+        jobs[job_id]["result"] = await _run_humanize(text, temperature, samples, engine, style)
         jobs[job_id]["status"] = "done"
     except Exception as e:
         logger.exception("job %s failed", job_id)
@@ -696,6 +714,7 @@ class HumanizeRequest(BaseModel):
     temperature: float = Field(0.7, ge=0.1, le=2.0)
     samples: int = Field(4, ge=1, le=4)
     engine: str = Field("", max_length=32)
+    style: str = Field("professional", max_length=32)
 
 
 class HumanizeResponse(BaseModel):
@@ -710,6 +729,7 @@ class JobStartRequest(BaseModel):
     temperature: float = Field(0.85, ge=0.1, le=2.0)
     samples: int = Field(3, ge=1, le=4)  # 3 keeps the batch ~75s, leaving budget for the pronoun surgical pass
     engine: str = Field("", max_length=32)
+    style: str = Field("professional", max_length=32)
 
 
 class DetectRequest(BaseModel):
@@ -819,7 +839,7 @@ async def health():
 async def humanize(req: HumanizeRequest):
     if not state:
         raise HTTPException(503, "models not loaded yet")
-    r = await _run_humanize(req.text, req.temperature, req.samples, req.engine)
+    r = await _run_humanize(req.text, req.temperature, req.samples, req.engine, req.style)
     return HumanizeResponse(**{k: r[k] for k in ("humanized", "model", "elapsed_ms", "ai_probability")})
 
 
@@ -833,7 +853,7 @@ async def job_start(req: JobStartRequest):
         raise HTTPException(429, "server busy — try again in a moment")
     job_id = uuid.uuid4().hex[:16]
     jobs[job_id] = {"status": "running", "created_at": time.time()}
-    asyncio.create_task(_run_job(job_id, req.text, req.temperature, req.samples, req.engine))
+    asyncio.create_task(_run_job(job_id, req.text, req.temperature, req.samples, req.engine, req.style))
     return {"id": job_id}
 
 

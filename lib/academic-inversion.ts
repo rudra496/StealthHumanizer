@@ -151,7 +151,7 @@ function scrubPostTranslationClichés(text: string): string {
 
   // 2. Eliminate preambles like "It is important to note that X" -> "X"
   cleaned = cleaned.replace(
-    /(?:It is (?:important|worth|crucial|essential) to note that|It should be noted that)\s+([a-z])/gi,
+    /(?:It is (?:important|worth|crucial|essential) to (?:note|recognize|remember|highlight) that|It should be noted that)\s+([a-z])/gi,
     (_, firstChar) => firstChar.toUpperCase()
   );
 
@@ -194,6 +194,10 @@ function scrubPostTranslationClichés(text: string): string {
     [/\bhas the potential to\b/gi, 'can'],
     [/\bmultifaceted\b/gi, 'complex'],
     [/\bstreamline\b/gi, 'simplify'],
+    [/\bparadigm shift\b/gi, 'major change'],
+    [/\btransformative impact\b/gi, 'significant effect'],
+    [/\brapidly evolving landscape\b/gi, 'changing environment'],
+    [/\btechnological landscape\b/gi, 'technology sector'],
   ];
 
   for (const [pattern, replacement] of deInflationMap) {

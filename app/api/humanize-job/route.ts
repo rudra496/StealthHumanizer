@@ -46,7 +46,8 @@ export async function POST(request: NextRequest) {
         text,
         temperature: body.temperature ?? 0.85,
         samples: body.samples ?? 2,
-        engine: body.engine ?? '',
+        engine: body.engine && body.engine !== 'human-corpus' ? body.engine : '',
+        style: body.style || (body.engine && body.engine !== 'human-corpus' ? body.engine : 'professional'),
       }),
     });
     const data = await upstream.json().catch(() => ({}));
