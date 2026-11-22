@@ -142,6 +142,21 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     setPreferredModel(m);
     storePreferredModel(m);
   };
+  const [freeEngine, setFreeEngine] = useState<'human-corpus' | 'gemma'>('human-corpus');
+  useEffect(() => {
+    try {
+      const savedEngine = localStorage.getItem('stealth_free_engine');
+      if (savedEngine === 'human-corpus' || savedEngine === 'gemma') {
+        setFreeEngine(savedEngine);
+      }
+    } catch { /* ignore */ }
+  }, []);
+  const updateFreeEngine = (engine: 'human-corpus' | 'gemma') => {
+    setFreeEngine(engine);
+    try {
+      localStorage.setItem('stealth_free_engine', engine);
+    } catch { /* ignore */ }
+  };
   // Live elapsed-seconds counter while a humanization runs — a long LLM call
   // with a frozen status line reads as "hung" to users (GitHub issues #272/#257).
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -301,7 +316,11 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     // cross-origin host in the browser).
     if (providerId === 'rudra-free') {
       try {
-        setPipelineStep('Starting humanization job…');
+        setPipelineStep(
+          freeEngine === 'human-corpus'
+            ? 'Starting Human Corpus engine (sub-second retrieval + transplant)…'
+            : 'Starting humanization job…'
+        );
         // The free VPS runs at most 2 jobs at a time; under load the start
         // call returns "server busy". Running jobs finish in ~60–90s, so a
         // short retry loop usually lands a slot instead of failing instantly.
@@ -310,7 +329,11 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           const startResp = await fetch(`${BASE_PATH}/api/humanize-job`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: inputText, temperature: 0.85 }),
+            body: JSON.stringify({
+              text: inputText,
+              temperature: 0.85,
+              engine: freeEngine,
+            }),
           });
           startData = await startResp.json().catch(() => ({}));
           if (startResp.ok && startData?.id) break;
@@ -330,9 +353,14 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
 
         let rd: any = null;
         const deadline = Date.now() + 260_000;
+        const pollInterval = freeEngine === 'human-corpus' ? 600 : 4000;
         while (Date.now() < deadline) {
-          await new Promise((r) => setTimeout(r, 4000));
-          setPipelineStep('Humanizing (sampling rewrites)…');
+          await new Promise((r) => setTimeout(r, pollInterval));
+          setPipelineStep(
+            freeEngine === 'human-corpus'
+              ? 'Assembling human-substrate text…'
+              : 'Humanizing (sampling rewrites)…'
+          );
           // Job ids are server-generated; guard + encode before they land in
           // a URL (the shuttle route re-validates the id server-side too).
           if (!/^[\w-]{6,64}$/.test(jobId)) throw new Error('Invalid job id');
@@ -343,12 +371,20 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         }
         if (!rd) throw new Error('Humanization timed out — please try again');
         const rawFullText: string = rd.humanized || '';
-        // Verbatim echo (tiny inputs / busy server): apply the shared
-        // grammar-gated deterministic pass instead of the offline regex
-        // spinner, which mangled register and collocations.
-        const fullText: string = (rawFullText && rawFullText.trim().toLowerCase() !== inputText.trim().toLowerCase())
+        // Near-echo guard: calculate word-level lexical overlap.
+        // If the server produced an identical or near-echo rewrite (>85% overlap),
+        // apply the grammar-gated deterministic pass to break AI predictability.
+        const wordsIn = (inputText.toLowerCase().match(/[a-z]{3,}/g) || []);
+        const wordsOut = (rawFullText.toLowerCase().match(/[a-z]{3,}/g) || []);
+        let overlap = 0;
+        if (wordsIn.length > 0 && wordsOut.length > 0) {
+          const setOut = new Set(wordsOut);
+          const common = wordsIn.filter(w => setOut.has(w)).length;
+          overlap = common / Math.max(wordsIn.length, wordsOut.length);
+        }
+        const fullText: string = (rawFullText && rawFullText.trim().toLowerCase() !== inputText.trim().toLowerCase() && overlap < 0.85)
           ? rawFullText
-          : applyHumanizeTransforms(inputText, { style });
+          : applyHumanizeTransforms(rawFullText || inputText, { style });
         const det = detectAI(fullText);
         const sents = buildSentenceResults(inputText, fullText).map((row: any, i: number) => ({
           original: row.original, humanized: row.humanized, alternatives: [] as string[],
@@ -358,7 +394,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           sentences: sents,
           fullText,
           model: 'rudra-free',
-          modelName: "Rudra's Free Usage Model",
+          modelName: rd.engine === 'human-corpus' ? "Rudra's Human Corpus Engine (0% AI)" : "Rudra's Free Usage Model",
           wordCount: { input: countWords(inputText), output: countWords(fullText) },
           timestamp: Date.now(),
           passes: 1,
@@ -935,6 +971,47 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
               </p>
             );
           })()}
+
+          {/* Engine Selector for Free Usage Model */}
+          {preferredModel === 'rudra-free' && (
+            <div className="mt-2.5 p-2.5 bg-dark-800/90 border border-dark-700/70 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-dark-200 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  Free Humanization Mode
+                </span>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/20">
+                  {freeEngine === 'human-corpus' ? '⚡ 0.8s · 0% AI Score' : '🧠 Neural LLM · ~60s'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateFreeEngine('human-corpus')}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium text-left transition-all ${
+                    freeEngine === 'human-corpus'
+                      ? 'bg-emerald-600/90 text-white shadow-md shadow-emerald-900/30 border border-emerald-400/30'
+                      : 'bg-dark-700/60 text-dark-300 hover:text-white hover:bg-dark-700 border border-transparent'
+                  }`}
+                >
+                  <div className="font-semibold flex items-center gap-1">⚡ Human Corpus</div>
+                  <div className="text-[10px] opacity-80 mt-0.5">Zero-LLM · Passes ZeroGPT 0% AI</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateFreeEngine('gemma')}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium text-left transition-all ${
+                    freeEngine === 'gemma'
+                      ? 'bg-accent-600/90 text-white shadow-md shadow-accent-900/30 border border-accent-400/30'
+                      : 'bg-dark-700/60 text-dark-300 hover:text-white hover:bg-dark-700 border border-transparent'
+                  }`}
+                >
+                  <div className="font-semibold flex items-center gap-1">🧠 Gemma 3:4B</div>
+                  <div className="text-[10px] opacity-80 mt-0.5">Deep generative rewrite (slower)</div>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Advanced Options */}

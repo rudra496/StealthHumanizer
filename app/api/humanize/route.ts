@@ -104,6 +104,7 @@ export async function POST(request: NextRequest) {
       freezeWords = '',
       synonymIntensity = 15,
       intensity: requestIntensity,
+      engine,
     } = parsedRequest.data;
 
     // Resolve intensity: explicit request wins; else 'stealth' style defaults to
@@ -183,7 +184,7 @@ export async function POST(request: NextRequest) {
           const chunks = chunkText(batchInput, 2500);
           let rewritten = '';
           if (isRudraFree) {
-            const r = await humanizeWithRudra(batchInput);
+            const r = await humanizeWithRudra(batchInput, engine || 'human-corpus');
             rewritten = r.text;
           } else if (isProAcademic) {
             const r = await runAcademicInversion(batchInput);
@@ -246,7 +247,7 @@ export async function POST(request: NextRequest) {
     if (isRudraFree) {
       // Rudra's hosted model takes the whole text in one shot — no chunking,
       // no system prompt. The model is purpose-built for humanization.
-      const rudraResult = await humanizeWithRudra(text);
+      const rudraResult = await humanizeWithRudra(text, engine || 'human-corpus');
       humanizedText = rudraResult.text;
     } else if (isProAcademic) {
       // Pro Academic runs zero-load multi-hop syntactic inversion with citation/math protection.
