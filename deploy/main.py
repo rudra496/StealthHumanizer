@@ -51,29 +51,29 @@ MAX_RUNNING_JOBS = 2     # protect the free ARM box
 
 STYLE_PROMPTS = {
     "professional": (
-        "You are an elite professional text humanizer and copy editor. Rewrite the user's text so it reads like an "
-        "articulate, senior human professional wrote it.\n"
+        "You are an elite professional human copy editor and prose stylist. Rewrite the user's text completely "
+        "so it reads like an articulate, senior human professional wrote it with authentic human cadence and clarity.\n"
         "RULES:\n"
-        "1. Preserve 100% of all meaning, facts, numbers, dates, technical terms, URLs, and citations with zero hallucination.\n"
-        "2. Keep the approximate length — do NOT summarize, shorten, or expand.\n"
-        "3. High Burstiness: Strongly vary sentence length. Mix punchy short sentences (4-8 words) with longer compound sentences (18-28 words). Never repeat the same rhythmic cadence.\n"
-        "4. Eliminate all robotic AI markers: never use furthermore, moreover, additionally, consequently, in conclusion, it is important to note, delve, tapestry, multifaceted, pivotal, foster, leverage, vibrant, landscape, testament.\n"
-        "5. Natural transitions: connect ideas organically with natural phrases (In practice, At the same time, That said, To that end, Meanwhile, In fact) or direct thematic openers.\n"
-        "6. Active and concrete voice: eliminate abstract passive nominalizations. Replace 'the implementation of X facilitates Y' with direct active human prose.\n"
+        "1. Preserve 100% of all facts, data, numbers, dates, technical names, and core arguments with zero hallucination.\n"
+        "2. Dismantle the AI syntax: Do NOT follow the original sentence structure or clause sequence. Completely rephrase how ideas are conveyed.\n"
+        "3. High Burstiness: Strongly vary sentence lengths. Mix punchy short sentences (4-8 words) with nuanced compound explanations (18-28 words). Break predictable rhythmic cadence.\n"
+        "4. Eliminate all formulaic AI markers: never use furthermore, moreover, additionally, consequently, in conclusion, it is important to note, delve, tapestry, multifaceted, pivotal, revolutionize, indispensable, transformative paradigm shift, paramount, foster, leverage, landscape, beacon, testament.\n"
+        "5. Natural transitions: Connect ideas organically through direct action or natural phrases (In practice, At the same time, Meanwhile, That said, To that end, In fact).\n"
+        "6. Active and concrete voice: Replace abstract passive nominalizations ('the implementation of X facilitates Y') with direct, active human phrasing.\n"
         "7. Output ONLY the rewritten text. No preamble, no quotes, no markdown explanations."
     ),
     "academic": (
-        "You are an expert academic peer reviewer and scholarly editor. Rewrite the text to read like a high-impact journal publication written by a human scholar.\n"
+        "You are a senior academic scholar and journal peer reviewer. Rewrite the text into rigorous, authentic scholarly prose as published by leading human researchers.\n"
         "RULES:\n"
-        "1. Preserve all citations, equations, numbers, datasets, domain terminology, and logical arguments with 100% fidelity.\n"
-        "2. Vary syntactic structures and avoid repetitive sentence templates.\n"
-        "3. Eliminate formulaic AI transitions: do NOT use furthermore, moreover, additionally, in conclusion, it is crucial to note that, underscores, multifaceted.\n"
-        "4. Use genuine scholarly discourse markers: In particular, Notably, Conversely, Empirical evidence indicates, To examine this dynamic.\n"
-        "5. Maintain a formal, authoritative academic register without contractions.\n"
-        "6. Output ONLY the rewritten text. No preamble, no quotes."
+        "1. Preserve all citations, equations, numbers, datasets, specialized domain nomenclature, and logical argumentation with 100% fidelity.\n"
+        "2. Syntactic Variety: Avoid repetitive passive templates. Employ sophisticated syntactic variety (fronting dependent clauses, using semicolons, contrasting empirical observations).\n"
+        "3. Zero formulaic AI discourse markers: strictly avoid furthermore, moreover, additionally, in conclusion, it is crucial to note that, underscores, multifaceted, tapestry, delve.\n"
+        "4. Authentic scholarly discourse: Use precise academic markers (Empirical findings suggest, Notably, Conversely, In particular, To evaluate this dynamic).\n"
+        "5. Formal, authoritative human register without artificial corporate padding.\n"
+        "6. Output ONLY the rewritten academic text. No preamble, no quotes."
     ),
     "casual": (
-        "You are a friendly, articulate human writer. Rewrite the text into a natural, conversational human tone.\n"
+        "You are a friendly, articulate human writer. Rewrite the text into a natural, conversational human tone that sounds completely genuine and relatable.\n"
         "RULES:\n"
         "1. Keep all facts, names, and information completely intact.\n"
         "2. Use natural contractions (don't, it's, they're, we've) and direct everyday phrasing.\n"
@@ -82,13 +82,13 @@ STYLE_PROMPTS = {
         "5. Output ONLY the rewritten text. No preamble, no quotes."
     ),
     "stealth": (
-        "You are a master humanizer specializing in evading statistical and perplexity detection. Rewrite the text so it has the natural entropy, lexical diversity, and varied burstiness of human writing.\n"
-        "RULES:\n"
-        "1. Preserve all core facts, numbers, specific terms, and intent without altering meaning.\n"
-        "2. Maximum Burstiness: Drastically fluctuate sentence length (e.g. 5 words, then 24 words, then 10 words, then 28 words).\n"
-        "3. Invert predictable clause order (e.g. front prepositional phrases or participial contexts).\n"
-        "4. Absolutely zero stock AI transitions (no furthermore, moreover, additionally, consequently, in conclusion, it is important to note, delve, tapestry).\n"
-        "5. Output ONLY the rewritten text. No preamble, no quotes."
+        "You are an undetectable human prose specialist. Rewrite the following text to maximize entropy, burstiness, and natural human syntactic irregularity.\n"
+        "CRITICAL RULES:\n"
+        "1. Asymmetry: Avoid uniform sentence lengths. Structure clauses with deliberate human asymmetry (short declaration, long detailed explanation, punchy conclusion).\n"
+        "2. Organic Transitions: Connect ideas with natural thought progression rather than mechanical linking adverbs.\n"
+        "3. Natural Diction: Avoid overused AI tropes (paradigm shift, operational dynamics, multifaceted, unprecedented, delve).\n"
+        "4. Preserve all underlying concepts, logic, and facts accurately.\n"
+        "5. Output ONLY the final rewritten text. No preamble, no quotes."
     ),
 }
 
@@ -188,7 +188,8 @@ def _added_pronouns(src: str, c: str) -> set:
 
 
 def _ents(t: str) -> set:
-    return {w for w in _ENT_RE.findall(t) if w.lower() not in _ENT_STOP}
+    t_clean = re.sub(r"(?:^|[.!?]\s+)[A-Z][a-z]*\b", " ", t)
+    return {w for w in _ENT_RE.findall(t_clean) if w.lower() not in _ENT_STOP}
 
 
 def _neg_count(t: str) -> int:
@@ -205,19 +206,19 @@ def _f1_vs(src: str, c: str) -> float:
     return 2 * p * r / max(1e-9, p + r)
 
 
-def _meaning_ok(src: str, c: str) -> bool:
+def _meaning_ok(src: str, c: str, style: str = "professional") -> bool:
     sl = max(1, len(src))
-    if not (0.6 <= len(c) / sl <= 1.6):
+    if not (0.5 <= len(c) / sl <= 1.8):
         return False
     if sorted(_NUM_RE.findall(src)) != sorted(_NUM_RE.findall(c)):
         return False
     if _ents(c) - _ents(src):
         return False
-    if abs(_neg_count(c) - _neg_count(src)) > 1:
+    if abs(_neg_count(c) - _neg_count(src)) > 2:
         return False
-    if _added_pronouns(src, c):
+    if style != "casual" and _added_pronouns(src, c):
         return False
-    return _f1_vs(src, c) >= 0.30
+    return _f1_vs(src, c) >= 0.18
 
 
 def _one_detector_prob(tok_, mdl_, txt: str) -> float:
@@ -318,17 +319,17 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
     if len(cands) >= 2 and cands[0] == cands[1]:
         cands = cands[:1]
 
-    safe = [c for c in cands if _meaning_ok(text, c)]
+    safe = [c for c in cands if _meaning_ok(text, c, style=resolved_style)]
     if not safe:
-        tier = [c for c in cands if _f1_vs(text, c) >= 0.25] or cands
-        clean = [c for c in tier if not _added_pronouns(text, c)]
+        tier = [c for c in cands if _f1_vs(text, c) >= 0.18] or cands
+        clean = [c for c in tier if not _added_pronouns(text, c)] if resolved_style != "casual" else tier
         pool = clean or tier
     else:
         pool = safe
 
     # Composite ranking: the roberta ensemble cannot discriminate candidates
     # (scores all ~1.0 on long text), so rank by the style signals that
-    # actually track ZeroGPT's behaviour — low AI-cliché density, high
+    # actually track modern detector behaviour — low AI-cliché density, high
     # sentence-length burstiness, natural contraction use — with the
     # ensemble as tiebreak.
     _CLICHES = ("furthermore", "moreover", "additionally", "in conclusion",
@@ -355,7 +356,7 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
         burst = (var ** 0.5) / mean_len if mean_len else 0
         contr = len(re.findall(r"\b\w+(?:'|(?:\u2019))(?:s|t|re|ve|ll|d|m)\b", c, re.I))
         # lower is better: cliché + padding density penalised, burstiness rewarded
-        return ((cliche + padding) / words * 100) - burst - min(contr, 4) * 0.5
+        return ((cliche + padding) / words * 100) - burst * 2.5 - min(contr, 4) * 0.5
 
     def _rank_key(c: str) -> tuple:
         return (round(_style_score(c), 2), round(_ensemble_ai_prob(c), 2))
@@ -494,24 +495,6 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
         return s
 
     out = _scrub_and_tidy(out)
-
-    # Grammar/register polish on the winner: fix verb agreement, comma splices
-    # and punctuation with a copy-editor prompt. Time-guarded (only with >=55s
-    # of job budget left) and acceptance-gated (F1 >= 0.75 vs the winner, no
-    # digits lost, no pronouns added, no length blowout) — otherwise the
-    # winner ships unchanged. The scrub re-runs on the polished text so the
-    # copy editor cannot sneak a cliché back in.
-    if out and (JOB_BUDGET_S - (time.perf_counter() - t0)) >= 55:
-        try:
-            polished = await _one_gemma_sample(out, 0.25, system=POLISH_SYSTEM_PROMPT)
-            p = _clean_candidate(polished) if polished else ""
-            if (p and p != out and 0.6 <= len(p) / max(1, len(out)) <= 1.25
-                    and _f1_vs(out, p) >= 0.75 and not _added_pronouns(out, p)):
-                out = _scrub_and_tidy(p)
-                logger.info("grammar polish accepted (delta_chars=%d)", len(p) - len(out))
-        except Exception:
-            logger.exception("grammar polish pass failed")
-
     out_ai_prob = _ensemble_ai_prob(out) if out else 1.0
     if len(out) >= 2 and out[0] == out[-1] and out[0] in ('"', "'", "`"):
         out = out[1:-1].strip()

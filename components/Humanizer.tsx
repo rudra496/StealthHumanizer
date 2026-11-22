@@ -375,9 +375,10 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           const common = wordsIn.filter(w => setOut.has(w)).length;
           overlap = common / Math.max(wordsIn.length, wordsOut.length);
         }
-        const fullText: string = (rawFullText && rawFullText.trim().toLowerCase() !== inputText.trim().toLowerCase() && overlap < 0.85)
-          ? rawFullText
-          : applyHumanizeTransforms(rawFullText || inputText, { style });
+        const isEcho = !rawFullText || rawFullText.trim().toLowerCase() === inputText.trim().toLowerCase() || overlap >= 0.92;
+        const fullText: string = isEcho
+          ? applyHumanizeTransforms(rawFullText || inputText, { style })
+          : rawFullText;
         const det = detectAI(fullText);
         const sents = buildSentenceResults(inputText, fullText).map((row: any, i: number) => ({
           original: row.original, humanized: row.humanized, alternatives: [] as string[],
