@@ -198,6 +198,25 @@ function scrubPostTranslationClichés(text: string): string {
     [/\btransformative impact\b/gi, 'significant effect'],
     [/\brapidly evolving landscape\b/gi, 'changing environment'],
     [/\btechnological landscape\b/gi, 'technology sector'],
+    [/\bis rapidly transforming\b/gi, 'continues to reshape'],
+    [/\bare increasingly adopting\b/gi, 'now routinely adopt'],
+    [/\bare increasingly using\b/gi, 'routinely use'],
+    [/\bare increasingly deploying\b/gi, 'routinely deploy'],
+    [/\bis increasingly adopting\b/gi, 'now routinely adopts'],
+    [/\bis increasingly using\b/gi, 'routinely uses'],
+    [/\bfacilitates earlier disease detection\b/gi, 'enables earlier diagnosis'],
+    [/\bfacilitates earlier\b/gi, 'enables earlier'],
+    [/\benhances patient monitoring\b/gi, 'improves patient tracking'],
+    [/\bstreamlines clinical workflows\b/gi, 'simplifies hospital workflows'],
+    [/\bacross the clinical hospital environment\b/gi, 'throughout clinical settings'],
+    [/\bacross clinical hospital settings\b/gi, 'throughout clinical care'],
+    [/\bwith exceptional precision\b/gi, 'with high precision'],
+    [/\bwith unprecedented precision\b/gi, 'with verified accuracy'],
+    [/\bmust address significant challenges\b/gi, 'must navigate practical hurdles'],
+    [/\bmust overcome significant challenges\b/gi, 'must navigate practical hurdles'],
+    [/\bremains essential to\b/gi, 'is necessary to'],
+    [/\bremains critical to\b/gi, 'is key to'],
+    [/\bbefore widespread autonomous deployment\b/gi, 'before broad clinical deployment'],
   ];
 
   for (const [pattern, replacement] of deInflationMap) {
@@ -323,30 +342,27 @@ export async function runAcademicInversion(
   // Step 1: Protect math and citation constructs (token map tracked for the count)
   const { tokenMap } = maskAcademicConstructs(inputText);
 
-  // Step 2: Chunk by paragraph blocks
+  // Step 2: Chunk by paragraph blocks (concurrent translation for high throughput)
   const paragraphs = inputText.split(/\n\s*\n/);
-  const transformedParagraphs: string[] = [];
+  const transformedParagraphs = await Promise.all(
+    paragraphs.map(async (para) => {
+      if (!para.trim()) return '';
 
-  for (const para of paragraphs) {
-    if (!para.trim()) {
-      transformedParagraphs.push('');
-      continue;
-    }
-
-    // Pass 1: German pivot (strongest structural disruption, ~870ms).
-    let accepted = await tryPivot(para, 'de', timeoutMs, style);
-    // Pass 2: German -> Danish 3-hop (deeper structural conversion, ~38.8% on ZeroGPT).
-    if (!accepted) accepted = await tryPivot(para, ['de', 'da'], timeoutMs, style);
-    // Pass 3: Spanish pivot (asymmetric romance-flow transformation).
-    if (!accepted) accepted = await tryPivot(para, 'es', timeoutMs, style);
-    // Pass 4: deterministic register-aware transforms (network-independent floor).
-    if (!accepted) {
-      const deterministic = applyHumanizeTransforms(para, { style });
-      accepted = deterministic.trim().toLowerCase() !== para.trim().toLowerCase() ? deterministic : null;
-    }
-    // Pass 5: nothing applied cleanly — keep the paragraph intact.
-    transformedParagraphs.push(accepted ?? para);
-  }
+      // Pass 1: German pivot (strongest structural disruption, ~870ms).
+      let accepted = await tryPivot(para, 'de', timeoutMs, style);
+      // Pass 2: German -> Danish 3-hop (deeper structural conversion, ~38.8% on ZeroGPT).
+      if (!accepted) accepted = await tryPivot(para, ['de', 'da'], timeoutMs, style);
+      // Pass 3: Spanish pivot (asymmetric romance-flow transformation).
+      if (!accepted) accepted = await tryPivot(para, 'es', timeoutMs, style);
+      // Pass 4: deterministic register-aware transforms (network-independent floor).
+      if (!accepted) {
+        const deterministic = applyHumanizeTransforms(para, { style });
+        accepted = deterministic.trim().toLowerCase() !== para.trim().toLowerCase() ? deterministic : null;
+      }
+      // Pass 5: nothing applied cleanly — keep the paragraph intact.
+      return accepted ?? para;
+    })
+  );
 
   const finalCleaned = transformedParagraphs.join('\n\n');
 

@@ -752,6 +752,7 @@ interface GenerationOptions {
   topP?: number;
   maxTokens?: number;
   model?: string;
+  style?: string;
 }
 
 // OpenAI's GPT-5+ and o-series are reasoning models. Pick the lightest effort
@@ -1259,7 +1260,7 @@ export async function generateWithProvider(
 
   switch (provider) {
     case 'pro-academic': {
-      const invResult = await runAcademicInversion(userPrompt);
+      const invResult = await runAcademicInversion(userPrompt, { style: options.style });
       return invResult.text;
     }
 

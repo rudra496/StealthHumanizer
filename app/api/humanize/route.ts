@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
             const r = await humanizeWithRudra(batchInput, engine, resolvedStyle);
             rewritten = r.text;
           } else if (isProAcademic) {
-            const r = await runAcademicInversion(batchInput);
+            const r = await runAcademicInversion(batchInput, { style: resolvedStyle });
             rewritten = r.text;
           } else {
             for (let j = 0; j < chunks.length; j++) {
@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
       humanizedText = rudraResult.text;
     } else if (isProAcademic) {
       // Pro Academic runs zero-load multi-hop syntactic inversion with citation/math protection.
-      const invResult = await runAcademicInversion(text);
+      const invResult = await runAcademicInversion(text, { style: resolvedStyle });
       humanizedText = invResult.text;
     } else {
       for (let i = 0; i < chunks.length; i++) {
