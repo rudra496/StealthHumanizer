@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateAlternatives } from '@/lib/server/providers-runtime';
 import { isCliOnlyProvider } from '@/lib/providers';
 import { getSystemPrompt } from '@/lib/prompts';
-import { handleApiError } from '@/lib/api-response';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {

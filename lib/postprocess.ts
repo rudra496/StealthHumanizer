@@ -167,7 +167,7 @@ function addTypographicVariation(text: string): string {
 
 // ==================== 2b. SENTENCE REORDERING ====================
 
-function reorderSentences(paragraph: string): string {
+function _reorderSentences(paragraph: string): string {
   const sentences = splitSentences(paragraph);
   if (sentences.length <= 2) return paragraph; // Too short to reorder
 
@@ -188,7 +188,7 @@ function reorderSentences(paragraph: string): string {
     if (i === j) continue;
 
     // Check if swapping would break pronoun references
-    const afterI = result.slice(Math.min(i, j) + 1).join(' ');
+    const _afterI = result.slice(Math.min(i, j) + 1).join(' ');
     const sentenceI = result[i];
     const sentenceJ = result[j];
 
@@ -303,15 +303,11 @@ function manipulateSentenceLengths(text: string): string {
       ];
 
       let breakPoint = -1;
-      let replacement = '. ';
 
       for (const pattern of breakPatterns) {
         const match = text.match(pattern);
         if (match && match.index !== undefined && match.index > 10 && match.index < text.length - 10) {
           breakPoint = match.index;
-          // Start new sentence with the conjunction
-          replacement = '. ' + match[0].replace(/,\s+/, '').charAt(0).toUpperCase() +
-            match[0].replace(/,\s+/, '').slice(1);
           break;
         }
       }
@@ -323,7 +319,6 @@ function manipulateSentenceLengths(text: string): string {
         if (middleCommas.length > 0) {
           const c = randomPick(middleCommas);
           breakPoint = c.index!;
-          replacement = '. ';
         }
       }
 
@@ -393,7 +388,7 @@ function injectPerplexity(text: string): string {
 
 // ==================== 2f. PARAGRAPH STRUCTURE RANDOMIZATION ====================
 
-function randomizeParagraphs(text: string): string {
+function _randomizeParagraphs(text: string): string {
   const paragraphs = splitParagraphs(text);
   if (paragraphs.length <= 1) return text;
 

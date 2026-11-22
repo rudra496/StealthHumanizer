@@ -12,7 +12,7 @@
 // - Built-in retry logic: if a request fails, it retries automatically
 
 import type { ModelProvider } from './types';
-import { PROVIDERS, getProvider } from './providers';
+import { getProvider } from './providers';
 
 // 💰 NOOB EXPLAINER: Cost tracking
 // Each AI model charges per "token" (roughly per word). GPT-4 costs

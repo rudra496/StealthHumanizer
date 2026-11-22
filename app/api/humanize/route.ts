@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ModelProvider, StylePreset, Intensity } from '@/lib/types';
-import { getSystemPrompt, getSelfCheckPrompt, getCorpusAwareSystemPrompt, LEVEL_PARAMS } from '@/lib/prompts';
+import { getSystemPrompt, getSelfCheckPrompt, getCorpusAwareSystemPrompt } from '@/lib/prompts';
 import { getProvider, isCliOnlyProvider } from '@/lib/providers';
 import { generateWithProvider } from '@/lib/server/providers-runtime';
 import { detectAI } from '@/lib/detector';

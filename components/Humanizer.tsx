@@ -202,7 +202,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); handleHumanize(); }
-      if (e.ctrlKey && e.shiftKey && e.key === 'C') { e.preventDefault(); result && handleCopy(); }
+      if (e.ctrlKey && e.shiftKey && e.key === 'C') { e.preventDefault(); if (result) handleCopy(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);

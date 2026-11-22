@@ -10,7 +10,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { humanizeWithRudra } from '@/lib/server/rudra-free';
 import { refineAcademicSentences } from '@/lib/academic-inversion';
 
-const VALID_STYLES = ['academic', 'business', 'creative', 'casual', 'technical', 'humanize', 'professional'];
+const _VALID_STYLES = ['academic', 'business', 'creative', 'casual', 'technical', 'humanize', 'professional'];
 
 
 export async function POST(request: NextRequest) {

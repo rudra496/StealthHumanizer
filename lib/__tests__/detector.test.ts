@@ -3,7 +3,6 @@
 import { detectAI, getScoreColor, getClassificationColor, getScoreBarColor, calibrateWithCorpus, getHumanScoreRange } from '../detector';
 
 describe('splitIntoSentences', () => {
-  const detect = (text: string) => detectAI(text);
   it('splits on periods', () => {
     const result = detectAI('Hello world. This is a test. Another one.');
     expect(result.sentences).toHaveLength(3);

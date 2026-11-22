@@ -104,7 +104,7 @@ export default function Detector({ showToast }: DetectorProps) {
   };
 
   // ML verdict drives the headline score; heuristic drives the secondary metrics.
-  const headlineScore = ml ? Math.round(ml.humanProbability * 100) : (heuristic ? heuristic.score : 0);
+  const _headlineScore = ml ? Math.round(ml.humanProbability * 100) : (heuristic ? heuristic.score : 0);
   const scoreColor = ml
     ? (ml.label === 'human' ? 'text-green-400' : 'text-red-400')
     : (heuristic ? getScoreColor(heuristic.score) : 'text-dark-400');

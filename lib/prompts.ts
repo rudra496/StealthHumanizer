@@ -289,7 +289,7 @@ Return ONLY the rewritten text.`;
 
 export function getRehumanizePrompt(
   flaggedSentences: string[],
-  style: StylePreset,
+  _style: StylePreset,
 ): string {
   return `These sentences were flagged as AI-generated. Rewrite each one so it reads like clear, polished, natural human writing — the kind you would find in a well-edited article or report.
 
@@ -488,7 +488,7 @@ const TRADITIONAL_CHINESE_NOTES = `
 - 重点在于消除AI痕迹，而非改变地区用语习惯`;
 
 // Chinese-specific level instructions
-const CHINESE_LEVEL_INSTRUCTIONS: Record<string, string> = {
+const _CHINESE_LEVEL_INSTRUCTIONS: Record<string, string> = {
   light: `改写等级：轻度（LIGHT）
 - 替换2-3个AI典型连接词
 - 打破1-2处并列结构

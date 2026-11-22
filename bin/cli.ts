@@ -321,9 +321,6 @@ function resolveApiKey(parsed: ParsedCli, provider: ModelProvider): string {
 }
 
 function resolveHumanizationOptions(parsed: ParsedCli, provider: ModelProvider): HumanizationOptions {
-  const styleGuidePath = flagString(parsed, 'style-guide');
-  const customTone = styleGuidePath ? readTextFile(styleGuidePath) : undefined;
-
   return {
     style: validateChoice(flagString(parsed, 'style') ?? 'casual', STYLES, '--style'),
     model: provider,
