@@ -351,6 +351,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
         let rd: any = null;
         const deadline = Date.now() + 260_000;
         const pollInterval = 3000;
+        let notFoundCount = 0;
         while (Date.now() < deadline) {
           await new Promise((r) => setTimeout(r, pollInterval));
           setPipelineStep('Humanizing with neural rewrite…');
@@ -361,6 +362,14 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
           const stData = await stResp.json().catch(() => ({}));
           if (stData?.status === 'done') { rd = stData; break; }
           if (stData?.status === 'error') throw new Error(stData?.error || 'Humanization failed');
+          if (stResp.status === 404 || /not found|unknown job/i.test(stData?.error || '')) {
+            notFoundCount++;
+            if (notFoundCount >= 4) {
+              throw new Error('Humanization job was lost or expired. Please try again.');
+            }
+          } else {
+            notFoundCount = 0;
+          }
         }
         if (!rd) throw new Error('Humanization timed out — please try again');
         const rawFullText: string = rd.humanized || '';

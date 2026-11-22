@@ -45,49 +45,49 @@ LONG_MODEL = os.environ.get("OLLAMA_HUMANIZER_LONG", "gemma3:4b")
 
 # Job lifecycle: hard cap sampling well inside the frontend's poll window.
 JOB_BUDGET_S = 130
-OLLAMA_SEMAPHORE = asyncio.Semaphore(3)  # cap concurrent gemma calls box-wide
+OLLAMA_SEMAPHORE = asyncio.Semaphore(1)  # serialize gemma calls to prevent ARM core starvation
 JOB_TTL_S = 900          # finished jobs pruned after 15 min
 MAX_RUNNING_JOBS = 2     # protect the free ARM box
 
 STYLE_PROMPTS = {
     "professional": (
-        "You are an elite professional human copy editor and prose stylist. Rewrite the user's text completely "
-        "so it reads like an articulate, senior human professional wrote it with authentic human cadence and clarity.\n"
-        "RULES:\n"
-        "1. Preserve 100% of all facts, data, numbers, dates, technical names, and core arguments with zero hallucination.\n"
-        "2. Dismantle the AI syntax: Do NOT follow the original sentence structure or clause sequence. Completely rephrase how ideas are conveyed.\n"
-        "3. High Burstiness: Strongly vary sentence lengths. Mix punchy short sentences (4-8 words) with nuanced compound explanations (18-28 words). Break predictable rhythmic cadence.\n"
-        "4. Eliminate all formulaic AI markers: never use furthermore, moreover, additionally, consequently, in conclusion, it is important to note, delve, tapestry, multifaceted, pivotal, revolutionize, indispensable, transformative paradigm shift, paramount, foster, leverage, landscape, beacon, testament.\n"
-        "5. Natural transitions: Connect ideas organically through direct action or natural phrases (In practice, At the same time, Meanwhile, That said, To that end, In fact).\n"
+        "You are an elite senior human editor and prose stylist. Rewrite the user's text into articulate, authentic human prose that completely bypasses AI detectors.\n"
+        "CRITICAL RULES:\n"
+        "1. ZERO HALLUCINATION: Preserve 100% of all facts, data, numbers, dates, technical names, and core arguments. Never invent new statistics or dates.\n"
+        "2. High Burstiness: Drastically vary sentence length. Mix punchy short sentences (3-7 words) with complex, compound explanations (18-30 words). Never repeat the same rhythmic cadence.\n"
+        "3. Complete Structural Rewrite: Dismantle the AI syntax. Do NOT follow the original clause sequence or sentence templates. Change the order of ideas and reframe points through concrete action.\n"
+        "4. Ban All Formulaic AI Markers: Never use furthermore, moreover, additionally, consequently, in conclusion, it is important to note, delve, tapestry, multifaceted, pivotal, revolutionize, indispensable, transformative paradigm shift, paramount, foster, leverage, landscape, beacon, testament, catalyst, operational dynamics.\n"
+        "5. Natural Flow: Connect ideas organically with punctuation (colons, dashes, semicolons) and direct logic rather than mechanical transition adverbs.\n"
         "6. Active and concrete voice: Replace abstract passive nominalizations ('the implementation of X facilitates Y') with direct, active human phrasing.\n"
         "7. Output ONLY the rewritten text. No preamble, no quotes, no markdown explanations."
     ),
     "academic": (
-        "You are a senior academic scholar and journal peer reviewer. Rewrite the text into rigorous, authentic scholarly prose as published by leading human researchers.\n"
-        "RULES:\n"
-        "1. Preserve all citations, equations, numbers, datasets, specialized domain nomenclature, and logical argumentation with 100% fidelity.\n"
-        "2. Syntactic Variety: Avoid repetitive passive templates. Employ sophisticated syntactic variety (fronting dependent clauses, using semicolons, contrasting empirical observations).\n"
-        "3. Zero formulaic AI discourse markers: strictly avoid furthermore, moreover, additionally, in conclusion, it is crucial to note that, underscores, multifaceted, tapestry, delve.\n"
-        "4. Authentic scholarly discourse: Use precise academic markers (Empirical findings suggest, Notably, Conversely, In particular, To evaluate this dynamic).\n"
-        "5. Formal, authoritative human register without artificial corporate padding.\n"
-        "6. Output ONLY the rewritten academic text. No preamble, no quotes."
+        "You are an accomplished scholar and journal peer reviewer. Rewrite the user's text into rigorous, authentic academic prose as written by leading human researchers.\n"
+        "CRITICAL RULES:\n"
+        "1. ZERO HALLUCINATION: Retain all citations, equations, numbers, datasets, specialized domain nomenclature, and logical argumentation with 100% fidelity. Never invent new data.\n"
+        "2. Syntactic Sophistication: Employ varied, complex human syntactic structures (fronting dependent clauses, using semicolons, contrasting empirical observations). Avoid repetitive passive templates.\n"
+        "3. High Rhythm Variation: Intersperse concise, authoritative declarations with nuanced, detailed analytical observations.\n"
+        "4. Zero AI Clichés: Strictly avoid furthermore, moreover, additionally, consequently, in conclusion, it is crucial to note that, underscores, multifaceted, tapestry, delve into, pivotal role, paramount, catalyst.\n"
+        "5. Scholarly Discourse: Use precise scholarly transitions (Notably, Empirical findings suggest, Conversely, In particular, To evaluate this dynamic).\n"
+        "6. Formal, authoritative human register without artificial corporate padding.\n"
+        "7. Output ONLY the rewritten academic text. No preamble, no quotes."
     ),
     "casual": (
-        "You are a friendly, articulate human writer. Rewrite the text into a natural, conversational human tone that sounds completely genuine and relatable.\n"
-        "RULES:\n"
-        "1. Keep all facts, names, and information completely intact.\n"
-        "2. Use natural contractions (don't, it's, they're, we've) and direct everyday phrasing.\n"
-        "3. Mix very short punchy statements with descriptive explanations for high burstiness.\n"
-        "4. Remove all corporate buzzwords, robotic jargon, and stiff transitions.\n"
+        "You are a natural, relatable human writer. Rewrite the user's text into engaging, conversational human prose that feels completely authentic and unscripted.\n"
+        "CRITICAL RULES:\n"
+        "1. ZERO HALLUCINATION: Keep all facts, names, technical specifics, and points completely intact. Do not invent facts.\n"
+        "2. Conversational Cadence: Use natural contractions (don't, it's, they're, we've, you'll) and everyday, relatable vocabulary.\n"
+        "3. High Burstiness: Drop in very short, punchy statements (2-5 words). Follow with lively, descriptive thoughts. Break all rigid rhythms.\n"
+        "4. Eliminate Robotic Tone: Remove corporate buzzwords, stiff jargon, and formulaic transitional phrases.\n"
         "5. Output ONLY the rewritten text. No preamble, no quotes."
     ),
     "stealth": (
-        "You are an undetectable human prose specialist. Rewrite the following text to maximize entropy, burstiness, and natural human syntactic irregularity.\n"
+        "You are an undetectable human prose specialist. Rewrite the user's text with maximum entropy and authentic human irregularity to bypass all neural AI classifiers.\n"
         "CRITICAL RULES:\n"
-        "1. Asymmetry: Avoid uniform sentence lengths. Structure clauses with deliberate human asymmetry (short declaration, long detailed explanation, punchy conclusion).\n"
-        "2. Organic Transitions: Connect ideas with natural thought progression rather than mechanical linking adverbs.\n"
-        "3. Natural Diction: Avoid overused AI tropes (paradigm shift, operational dynamics, multifaceted, unprecedented, delve).\n"
-        "4. Preserve all underlying concepts, logic, and facts accurately.\n"
+        "1. ZERO HALLUCINATION: Preserve every fact, number, technical term, and argument with 100% accuracy. Absolute rule: NEVER invent new numbers, percentages, dates, or statistics not in the original text.\n"
+        "2. Extreme Asymmetry: Human writing has high burstiness and uneven clause lengths. Pair an abrupt declaration with an expansive, detailed sentence featuring mid-sentence dashes or qualifications.\n"
+        "3. Thought Progression: Connect ideas through direct semantic logic rather than predictable transitional adverbs.\n"
+        "4. Diction: Banish all overused AI vocabulary (delve, multifaceted, paradigm shift, landscape, crucial, testament, pivotal, foster, leverage, paramount, consequently).\n"
         "5. Output ONLY the final rewritten text. No preamble, no quotes."
     ),
 }
@@ -114,6 +114,25 @@ POLISH_SYSTEM_PROMPT = (
 
 state: dict = {}
 jobs: dict = {}
+JOBS_FILE = "/tmp/jobs_state.json"
+
+
+def _load_jobs_file() -> dict:
+    if os.path.exists(JOBS_FILE):
+        try:
+            with open(JOBS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_jobs_file():
+    try:
+        with open(JOBS_FILE, "w", encoding="utf-8") as f:
+            json.dump(jobs, f)
+    except Exception:
+        pass
 _bart_running = asyncio.Lock()  # one BART decode box-wide at any time
 
 
@@ -216,8 +235,6 @@ def _meaning_ok(src: str, c: str, style: str = "professional") -> bool:
         return False
     if abs(_neg_count(c) - _neg_count(src)) > 2:
         return False
-    if style != "casual" and _added_pronouns(src, c):
-        return False
     return _f1_vs(src, c) >= 0.18
 
 
@@ -245,10 +262,9 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
         return _hpool_humanize(text)
     """Best-of-N gemma sampling + cleanup + meaning gate + ensemble ranking."""
     t0 = time.perf_counter()
-    base_temp = max(0.7, min(1.0, temperature))
-    n = min(4, max(1, samples))
-    temps = [base_temp, min(1.15, base_temp + 0.25),
-             min(1.25, base_temp + 0.4), min(1.3, base_temp + 0.5)][:n]
+    base_temp = max(0.75, min(0.92, temperature))
+    n = min(3, max(1, samples))
+    temps = [base_temp, min(0.95, base_temp + 0.08), min(1.0, base_temp + 0.15)][:n]
 
     resolved_style = (style or engine or "professional").lower()
     if resolved_style in ("gemma", "neural", "default"):
@@ -256,27 +272,6 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
     system_prompt = STYLE_PROMPTS.get(resolved_style, STYLE_PROMPTS["professional"])
 
     tasks = [asyncio.ensure_future(_one_gemma_sample(text, t, system=system_prompt)) for t in temps]
-
-    # v6 BART candidate (self-trained on pronoun-free casual technical pairs):
-    # generated POST-gemma, only while job budget remains. Concurrent BART+gemma
-    # saturates the 4 ARM cores and pushes every gemma sample past budget
-    # (all-fail -> echo ships), so BART never runs in parallel with the batch.
-    bart_tok = state.get("bart_tokenizer")
-    bart_mdl = state.get("bart_model")
-
-    def _bart_candidates() -> list:
-        if bart_mdl is None:
-            return []
-        outs = []
-        try:
-            enc = bart_tok(text, return_tensors="pt", truncation=True, max_length=512)
-            with torch.no_grad():
-                gen = bart_mdl.generate(**enc, max_length=700, num_beams=2,
-                                        no_repeat_ngram_size=3, early_stopping=True)
-            outs.append(bart_tok.decode(gen[0], skip_special_tokens=True).strip())
-        except Exception:
-            logger.exception("BART candidate generation failed")
-        return [o for o in outs if o]
 
     done, pending = await asyncio.wait(tasks, timeout=JOB_BUDGET_S)
     for t in pending:
@@ -290,26 +285,6 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
         if p:
             cands.append(p)
 
-    # Post-hoc BART: non-blocking lock (max one decode box-wide, a lingering
-    # to_thread decode releases the lock when it finishes), hard 25s cap, and
-    # never started unless the gemma batch left >= 25s of budget. Losing the
-    # BART candidate costs nothing — it is one extra style variant in the pool.
-    if bart_mdl is not None:
-        remaining = JOB_BUDGET_S - (time.perf_counter() - t0)
-        if remaining >= 25:
-            try:
-                await asyncio.wait_for(_bart_running.acquire(), timeout=0.05)
-            except (asyncio.TimeoutError, TimeoutError):
-                logger.info("BART candidate skipped (lock busy)")
-            else:
-                try:
-                    cands.extend(await asyncio.wait_for(
-                        asyncio.to_thread(_bart_candidates), timeout=25))
-                    logger.info("BART candidate included (remaining=%.1fs)", remaining)
-                except Exception:
-                    logger.info("BART candidate skipped (timeout/error, remaining=%.1fs)", remaining)
-                finally:
-                    _bart_running.release()
     if not cands:
         logger.error("all %d samples failed within %ss budget", n, JOB_BUDGET_S)
         cands = [text]
@@ -320,27 +295,22 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
         cands = cands[:1]
 
     safe = [c for c in cands if _meaning_ok(text, c, style=resolved_style)]
-    if not safe:
-        tier = [c for c in cands if _f1_vs(text, c) >= 0.18] or cands
-        clean = [c for c in tier if not _added_pronouns(text, c)] if resolved_style != "casual" else tier
-        pool = clean or tier
-    else:
+    if safe:
         pool = safe
+    else:
+        # If strict meaning gate fails, strictly prioritize candidates matching source numbers
+        src_nums = sorted(_NUM_RE.findall(text))
+        exact_nums = [c for c in cands if sorted(_NUM_RE.findall(c)) == src_nums]
+        f1_cands = [c for c in (exact_nums or cands) if _f1_vs(text, c) >= 0.18]
+        pool = f1_cands or exact_nums or cands
 
-    # Composite ranking: the roberta ensemble cannot discriminate candidates
-    # (scores all ~1.0 on long text), so rank by the style signals that
-    # actually track modern detector behaviour — low AI-cliché density, high
-    # sentence-length burstiness, natural contraction use — with the
-    # ensemble as tiebreak.
     _CLICHES = ("furthermore", "moreover", "additionally", "in conclusion",
                 "it is important to note", "delve", "tapestry", "navigate the",
                 "underscore", "multifaceted", "unprecedented", "pivotal role",
                 "foster", "leverag", "in the realm of", "a testament to",
-                "crucial", "comprehensive", "facilitate", "utilize")
+                "crucial", "comprehensive", "facilitate", "utilize", "paramount",
+                "consequently", "operational dynamics")
 
-    # Chatty padding — the #1 remaining register defect ("so it's pretty
-    # important", "really highlighting"). Penalised so a padded candidate
-    # never beats a clean one in the ranking.
     _PADDING = ("really", "absolutely", "pretty important", "lots of",
                 "anyway", "you know", "very much so")
 
@@ -362,82 +332,6 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
         return (round(_style_score(c), 2), round(_ensemble_ai_prob(c), 2))
 
     out = min(pool, key=_rank_key) if pool else text
-
-    # Pronoun surgical pass: rewrite only the sentences that add pronouns.
-    # The floor NEVER pastes raw source sentences back — verbatim AI phrases
-    # in the "humanized" text are the #1 reason detectors flag the output.
-    if _added_pronouns(text, out):
-        # First: one full-text resample with the instruction INLINE — gemma
-        # obeys in-request constraints far better than post-hoc rewrites.
-        try:
-            inline = await _one_gemma_sample(
-                text + "\n\n[Write the casual humanized version of the above. ABSOLUTE RULE: never use the words I, we, you, us, our, your, me, my — write about the subject only.]",
-                0.85)
-            icand = _clean_candidate(inline) if inline else ""
-            if icand and not _added_pronouns(text, icand) and _meaning_ok(text, icand):
-                out = icand
-        except Exception:
-            logger.exception("inline anti-pronoun resample failed")
-    if _added_pronouns(text, out) and (time.perf_counter() - t0) < 170:
-        sents = re.split(r"(?<=[.!?])\s+", out)
-        fixed = []
-        for s in sents:
-            if not _added_pronouns(text, s):
-                fixed.append(s)
-                continue
-            new_s = ""
-            for temp in (0.6, 0.9, 1.1):  # retry until pronoun-free
-                if (time.perf_counter() - t0) > 225:
-                    break
-                try:
-                    r = await _one_gemma_sample(
-                        s + "\n(Rewrite this single sentence. RULES: no personal pronouns (I, we, you, us, our, your); "
-                            "use plain everyday words; no formal phrases like 'it is important to note'; "
-                            "completely different phrasing from the original; same meaning.)",
-                        temp)
-                except Exception:
-                    r = ""
-                cand = _clean_candidate(r) if r else ""
-                if cand and not _added_pronouns(text, cand) and _f1_vs(s, cand) >= 0.22:
-                    new_s = cand
-                    break
-            if not new_s:
-                new_s = s
-            fixed.append(new_s)
-        candidate = " ".join(fixed)
-        seen = set()
-        candidate = " ".join(x for x in re.split(r"(?<=[.!?])\s+", candidate)
-                             if not (x in seen or seen.add(x)))
-        if not _added_pronouns(text, candidate):
-            out = candidate
-
-    # Deterministic de-pronouning for any survivors — grammar-preserving
-    # transforms for the exact patterns gemma produces. This GUARANTEES the
-    # zero-added-pronoun contract even when rewrite attempts time out.
-    if _added_pronouns(text, out):
-        p = out.replace("\u2019", "'").replace("\u2018", "'")  # gemma writes curly apostrophes
-        # specific patterns FIRST, case-insensitive (sentence-start "We must")
-        I_ = re.I
-        p = re.sub(r"\b(?:that\s+)?(?:we're|we are)\s+going\s+to\s+see\b", "ahead", p, flags=I_)
-        p = re.sub(r"\b(\w+)\s+(?:we're|we are)\s+facing\b", r"\1 the world faces", p, flags=I_)
-        p = re.sub(r"\b(?:we're|we are)\s+facing\b", r"looming", p, flags=I_)
-        p = re.sub(r"\b(?:that|which)\s+(?:we've|we have)\s+never\s+(\w+)\s+before\b", r"never \1 before", p, flags=I_)
-        p = re.sub(r"\b(?:that|which)\s+(?:we've|we have)\s+never\s+(\w+)\b", r"never \1", p, flags=I_)
-        p = re.sub(r"\b(?:we've|we have)\s+never\s+(\w+)\b", r"no one has ever \1", p, flags=I_)
-        p = re.sub(r"\b(\w+)\s+(?:we're|we are)\s+(\w+ing)\b(?!\s+to\b)", r"\1 \2", p, flags=I_)
-        p = re.sub(r"\bwe're\s+going\s+to\b", r"the goal is to", p, flags=I_)
-        p = re.sub(r"\bwe\s+need\s+to\b", r"there is a need to", p, flags=I_)
-        p = re.sub(r"\bwe\s+can\b", r"it is possible to", p, flags=I_)
-        p = re.sub(r"\byou're\s+(\w+ing)\b", r"that is \1", p, flags=I_)
-        p = re.sub(r"\byou\s+(?:can|could)\b", r"it is possible to", p, flags=I_)
-        p = re.sub(r"\byou\s+(?:know|see)\b", r"clearly", p, flags=I_)
-        p = re.sub(r"\bI\s+think\b", r"arguably", p, flags=I_)
-        p = re.sub(r"\s{2,}", " ", p).strip()
-        # Word-level substitutions barely move meaning — gate only on sane
-        # length (the earlier F1>=0.22 gate rejected legitimately-casual
-        # rewrites on heavily reworded topics and kept the pronoun leak).
-        if p and not _added_pronouns(text, p) and 0.5 <= len(p) / max(1, len(out)) <= 1.6:
-            out = p
 
     # Global AI-cliché scrub: the strongest detector signals are stock
     # phrases. Deterministic removal/replacement on the final output.
@@ -476,15 +370,15 @@ async def _run_humanize(text: str, temperature: float, samples: int, engine: str
         (r"\bfacilitated\b", "helped"),
         (r"\butilize(?:s|d)?\b", "use"), (r"\bcomprehensive\b", "complete"),
         (r"\bComprehensive\b", "Complete"), (r"\bUnprecedented\b", "Record"),
-        (r"\bfundamentally\b", "basically"), (r"\bparadigm shift\b", "big change"),
+        (r"\bparadigm shift\b", "big change"),
         (r"\btransformative\b", "major"), (r"\bholistic\b", "complete"),
+        (r"\bparamount\b", "vital"), (r"\bcatalyst\b", "driver"),
     ]
     def _scrub_and_tidy(s: str) -> str:
         for pat, rep in _SCRUB:
             s = re.sub(pat, rep, s)
-        # gemma emits en-dashes; humans type hyphens or commas. Letters only so a
-        # numeric range like 2020-2021 survives untouched.
-        s = re.sub(r"([a-zA-Z])\s*\u2013\s*([a-zA-Z])", r"\1, \2", s)
+        # Normalize en-dashes to spaced em-dashes (authentic human punctuation)
+        s = re.sub(r"([a-zA-Z])\s*[\u2013\u2014]\s*([a-zA-Z])", "\\1 — \\2", s)
         s = re.sub(r"\s{2,}", " ", s).strip()
         s = re.sub(r" ([,.;:!?])", r"\1", s)               # space before punct left by removals
         s = re.sub(r",\s*([.!?])", r"\1", s)               # dangling comma before sentence end
@@ -519,6 +413,7 @@ async def _run_job(job_id: str, text: str, temperature: float, samples: int, eng
         jobs[job_id]["error"] = str(e)[:300]
     finally:
         jobs[job_id]["finished_at"] = time.time()
+        _save_jobs_file()
 
 
 def _prune_jobs():
@@ -527,6 +422,8 @@ def _prune_jobs():
              if j.get("finished_at") and now - j["finished_at"] > JOB_TTL_S]
     for jid in stale:
         jobs.pop(jid, None)
+    if stale:
+        _save_jobs_file()
 
 
 # ============================== models ==============================
@@ -802,10 +699,16 @@ async def lifespan(_: FastAPI):
     except Exception as e:
         logger.warning("Ollama warmup probe failed: %s", e)
 
+    loaded = _load_jobs_file()
+    if loaded:
+        jobs.update(loaded)
+        _prune_jobs()
+        logger.info("restored %d jobs from %s", len(jobs), JOBS_FILE)
+
     logger.info("models loaded in %.1fs", time.perf_counter() - t0)
     yield
     state.clear()
-    jobs.clear()
+    _save_jobs_file()
 
 
 app = FastAPI(title="StealthHumanizer Models", version="4.0.0", lifespan=lifespan)
@@ -836,6 +739,7 @@ async def job_start(req: JobStartRequest):
         raise HTTPException(429, "server busy — try again in a moment")
     job_id = uuid.uuid4().hex[:16]
     jobs[job_id] = {"status": "running", "created_at": time.time()}
+    _save_jobs_file()
     asyncio.create_task(_run_job(job_id, req.text, req.temperature, req.samples, req.engine, req.style))
     return {"id": job_id}
 
