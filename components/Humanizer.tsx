@@ -142,7 +142,7 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
     setPreferredModel(m);
     storePreferredModel(m);
   };
-  const [freeEngine, setFreeEngine] = useState<'professional' | 'academic' | 'casual' | 'stealth'>('professional');
+  const [freeEngine, setFreeEngine] = useState<'professional' | 'academic' | 'casual' | 'stealth'>('stealth');
   useEffect(() => {
     try {
       const savedEngine = localStorage.getItem('stealth_free_engine');
@@ -328,8 +328,8 @@ export default function Humanizer({ showToast, onGoToSettings, isFirstVisit }: H
             body: JSON.stringify({
               text: inputText,
               temperature: 0.85,
-              style: freeEngine || style || 'professional',
-              engine: freeEngine === 'stealth' ? 'human-corpus' : (freeEngine || ''),
+              style: freeEngine || 'stealth',
+              engine: 'human-corpus',
             }),
           });
           startData = await startResp.json().catch(() => ({}));
